@@ -1,0 +1,36 @@
+name: train_nomad
+channels:
+- defaults
+- pytorch
+- conda-forge
+dependencies:
+- python=3.10.5
+- cudatoolkit=10.
+- numpy
+- matplotlib
+- ipykernel
+- pip
+- pip:
+  - torch
+  - torchvision
+  - tqdm==4.64.0
+  - git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
+  - opencv-python-headless
+#  - h5py==3.6.0
+  - wandb==0.12.18
+#  - --extra-index-url https://rospypi.github.io/simple/ 
+#  - rosbag
+#  - roslz4
+  - prettytable
+  - efficientnet-pytorch
+  - warmup-scheduler
+  - diffusers==0.11.1
+  - lmdb 
+  - vit-pytorch
+  - positional-encodings
+
+
+
+  
+
+

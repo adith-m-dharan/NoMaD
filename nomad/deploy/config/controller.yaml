@@ -1,0 +1,9 @@
+pd_controller:
+  ros__parameters:
+    v_max: 0.2
+    w_max: 0.2
+    frame_rate: 4
+    eps: 1e-7
+    #flip_ang_vel: 0.7853981633974483  # np.pi / 4
+    waypoint_timeout: 0.3
+

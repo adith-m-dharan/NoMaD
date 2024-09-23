@@ -1,319 +1,284 @@
-# General Navigation Models: GNM, ViNT and NoMaD
+﻿## Overview
 
-**Contributors**: Dhruv Shah, Ajay Sridhar, Nitish Dashora, Catherine Glossop, Kyle Stachowicz, Arjun Bhorkar, Kevin Black, Noriaki Hirose, Sergey Levine
+This readme explains the scripts to manage the setup, execution, tuning, training, and cleanup processes for the project. Below, you will find detailed instructions on how to deploy the model.
 
-_Berkeley AI Research_
-
-[Project Page](https://general-navigation-models.github.io) | [Citing](https://github.com/robodhruv/visualnav-transformer#citing) | [Pre-Trained Models](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing)
+- This is a ROS2 adaptation (NoMaD only and focused on Navigation) of the original work by [robodhruv](https://github.com/robodhruv/visualnav-transformer).
+- ROS humble and miniconda3 must be installed in `/opt/`.
+- `gdown` should be installed to download model waights from google drive.
+- You must have a camera node that publish the image topic.
+- Your robot must intrepret `/cmd_vel` topic for its motion.
+- The files in this repo should be located inside the `src` folder, which should be inside your workspace directory.
 
 ---
 
-General Navigation Models are general-purpose goal-conditioned visual navigation policies trained on diverse, cross-embodiment training data, and can control many different robots in zero-shot. They can also be efficiently fine-tuned, or adapted, to new robots and downstream tasks. Our family of models is described in the following research papers (and growing):
-1. [GNM: A General Navigation Model to Drive Any Robot](https://sites.google.com/view/drive-any-robot) (_October 2022_, presented at ICRA 2023)
-2. [ViNT: A Foundation Model for Visual Navigation](https://general-navigation-models.github.io/vint/index.html) (_June 2023_, presented at CoRL 2023)
-3. [NoMaD: Goal Masking Diffusion Policies for Navigation and Exploration](https://general-navigation-models.github.io/nomad/index.html) (_October 2023_)
-
-## Overview
-This repository contains code for training our family of models with your own data, pre-trained model checkpoints, as well as example code to deploy it on a TurtleBot2/LoCoBot robot. The repository follows the organization from [GNM](https://github.com/PrieureDeSion/drive-any-robot).
-
-- `./train/train.py`: training script to train or fine-tune the ViNT model on your custom data.
-- `./train/vint_train/models/`: contains model files for GNM, ViNT, and some baselines.
-- `./train/process_*.py`: scripts to process rosbags or other formats of robot trajectories into training data.
-- `./deployment/src/record_bag.sh`: script to collect a demo trajectory as a ROS bag in the target environment on the robot. This trajectory is subsampled to generate a topological graph of the environment.
-- `./deployment/src/create_topomap.sh`: script to convert a ROS bag of a demo trajectory into a topological graph that the robot can use to navigate.
-- `./deployment/src/navigate.sh`: script that deploys a trained GNM/ViNT/NoMaD model on the robot to navigate to a desired goal in the generated topological graph. Please see relevant sections below for configuration settings.
-- `./deployment/src/explore.sh`: script that deploys a trained NoMaD model on the robot to randomly explore its environment. Please see relevant sections below for configuration settings.
-
-## Train
-
-This subfolder contains code for processing datasets and training models from your own data.
-
-### Pre-requisites
-
-The codebase assumes access to a workstation running Ubuntu (tested on 18.04 and 20.04), Python 3.7+, and a GPU with CUDA 10+. It also assumes access to conda, but you can modify it to work with other virtual environment packages, or a native setup.
-### Setup
-Run the commands below inside the `vint_release/` (topmost) directory:
-1. Set up the conda environment:
-    ```bash
-    conda env create -f train/train_environment.yml
-    ```
-2. Source the conda environment:
-    ```
-    conda activate vint_train
-    ```
-3. Install the vint_train packages:
-    ```bash
-    pip install -e train/
-    ```
-4. Install the `diffusion_policy` package from this [repo](https://github.com/real-stanford/diffusion_policy):
-    ```bash
-    git clone git@github.com:real-stanford/diffusion_policy.git
-    pip install -e diffusion_policy/
-    ```
-
-
-### Data-Wrangling
-In the [papers](https://general-navigation-models.github.io), we train on a combination of publicly available and unreleased datasets. Below is a list of publicly available datasets used for training; please contact the respective authors for access to the unreleased data.
-- [RECON](https://sites.google.com/view/recon-robot/dataset)
-- [TartanDrive](https://github.com/castacks/tartan_drive)
-- [SCAND](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links)
-- [GoStanford2 (Modified)](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing)
-- [SACSoN/HuRoN](https://sites.google.com/view/sacson-review/huron-dataset)
-
-We recommend you to download these (and any other datasets you may want to train on) and run the processing steps below.
-
-#### Data Processing 
-
-We provide some sample scripts to process these datasets, either directly from a rosbag or from a custom format like HDF5s:
-1. Run `process_bags.py` with the relevant args, or `process_recon.py` for processing RECON HDF5s. You can also manually add your own dataset by following our structure below (if you are adding a custom dataset, please checkout the [Custom Datasets](#custom-datasets) section).
-2. Run `data_split.py` on your dataset folder with the relevant args.
-
-After step 1 of data processing, the processed dataset should have the following structure:
-
-```
-├── <dataset_name>
-│   ├── <name_of_traj1>
-│   │   ├── 0.jpg
-│   │   ├── 1.jpg
-│   │   ├── ...
-│   │   ├── T_1.jpg
-│   │   └── traj_data.pkl
-│   ├── <name_of_traj2>
-│   │   ├── 0.jpg
-│   │   ├── 1.jpg
-│   │   ├── ...
-│   │   ├── T_2.jpg
-│   │   └── traj_data.pkl
-│   ...
-└── └── <name_of_trajN>
-    	├── 0.jpg
-    	├── 1.jpg
-    	├── ...
-        ├── T_N.jpg
-        └── traj_data.pkl
-```  
-
-Each `*.jpg` file contains an forward-facing RGB observation from the robot, and they are temporally labeled. The `traj_data.pkl` file is the odometry data for the trajectory. It’s a pickled dictionary with the keys:
-- `"position"`: An np.ndarray [T, 2] of the xy-coordinates of the robot at each image observation.
-- `"yaw"`: An np.ndarray [T,] of the yaws of the robot at each image observation.
-
-
-After step 2 of data processing, the processed data-split should the following structure inside `vint_release/train/vint_train/data/data_splits/`:
-
-```
-├── <dataset_name>
-│   ├── train
-|   |   └── traj_names.txt
-└── └── test
-        └── traj_names.txt 
-``` 
-
-### Training your General Navigation Models
-Run this inside the `vint_release/train` directory:
-```bash
-python train.py -c <path_of_train_config_file>
-```
-The premade config yaml files are in the `train/config` directory. 
-
-#### Custom Config Files
-You can use one of the premade yaml files as a starting point and change the values as you need. `config/vint.yaml` is good choice since it has commented arguments. `config/defaults.yaml` contains the default config values (don't directly train with this config file since it does not specify any datasets for training).
-
-#### Custom Datasets
-Make sure your dataset and data-split directory follows the structures provided in the [Data Processing](#data-processing) section. Locate `train/vint_train/data/data_config.yaml` and append the following:
-
-```
-<dataset_name>:
-    metric_waypoints_distance: <average_distance_in_meters_between_waypoints_in_the_dataset>
-```
-
-Locate your training config file and add the following text under the `datasets` argument (feel free to change the values of `end_slack`, `goals_per_obs`, and `negative_mining`):
-```
-<dataset_name>:
-    data_folder: <path_to_the_dataset>
-    train: data/data_splits/<dataset_name>/train/ 
-    test: data/data_splits/<dataset_name>/test/ 
-    end_slack: 0 # how many timesteps to cut off from the end of each trajectory  (in case many trajectories end in collisions)
-    goals_per_obs: 1 # how many goals are sampled per observation
-    negative_mining: True # negative mining from the ViNG paper (Shah et al.)
-```
-
-#### Training your model from a checkpoint
-Instead of training from scratch, you can also load an existing checkpoint from the published results.
-Add `load_run: <project_name>/<log_run_name>`to your .yaml config file in `vint_release/train/config/`. The `*.pth` of the file you are loading to be saved in this file structure and renamed to “latest”: `vint_release/train/logs/<project_name>/<log_run_name>/latest.pth`. This makes it easy to train from the checkpoint of a previous run since logs are saved this way by default. Note: if you are loading a checkpoint from a previous run, check for the name the run in the `vint_release/train/logs/<project_name>/`, since the code appends a string of the date to each run_name specified in the config yaml file of the run to avoid duplicate run names. 
+## `exe.sh`
 
-
-If you want to use our checkpoints, you can download the `*.pth` files from [this link](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing).
+### Purpose
 
+The `exe.sh` script serves as the main entry point to run other scripts. It provides options to run the setup, execution, tuning the parameters, training the model, and cleaning up repo of this project. All related scripts are located in the `src/nomad/exe` folder.
 
-## Deployment
-This subfolder contains code to load a pre-trained ViNT and deploy it on the open-source [LoCoBot indoor robot platform](http://www.locobot.org/) with a [NVIDIA Jetson Orin Nano](https://www.amazon.com/NVIDIA-Jetson-Orin-Nano-Developer/dp/B0BZJTQ5YP/ref=asc_df_B0BZJTQ5YP/?tag=hyprod-20&linkCode=df0&hvadid=652427572954&hvpos=&hvnetw=g&hvrand=12520404772764575478&hvpone=&hvptwo=&hvqmt=&hvdev=c&hvdvcmdl=&hvlocint=&hvlocphy=1013585&hvtargid=pla-2112361227514&psc=1&gclid=CjwKCAjw4P6oBhBsEiwAKYVkq7dqJEwEPz0K-H33oN7MzjO0hnGcAJDkx2RdT43XZHdSWLWHKDrODhoCmnoQAvD_BwE). It can be easily adapted to be run on alternate robots, and researchers have been able to independently deploy it on the following robots – Clearpath Jackal, DJI Tello, Unitree A1, TurtleBot2, Vizbot – and in simulated environments like CARLA.
+### Usage
 
-### LoCoBot Setup
+1. **Navigate to the workspace directory:**
+   ```bash
+   cd /path/to/workspace
+   ```
 
-This software was tested on a LoCoBot running Ubuntu 20.04.
+2. **Run the exe script:**
+   ```bash
+   ./src/exe.sh
+   ```
 
+### Script Breakdown
 
-#### Software Installation (in this order)
-1. ROS: [ros-noetic](https://wiki.ros.org/noetic/Installation/Ubuntu)
-2. ROS packages: 
-    ```bash
-    sudo apt-get install ros-noetic-usb-cam ros-noetic-joy
-    ```
-3. [kobuki](http://wiki.ros.org/kobuki/Tutorials/Installation)
-4. Conda 
-    - Install anaconda/miniconda/etc. for managing environments
-    - Make conda env with environment.yml (run this inside the `vint_release/` directory)
-        ```bash
-        conda env create -f deployment/deployment_environment.yaml
-        ```
-    - Source env 
-        ```bash
-        conda activate vint_deployment
-        ```
-    - (Recommended) add to `~/.bashrc`: 
-        ```bash
-        echo “conda activate vint_deployment” >> ~/.bashrc 
-        ```
-5. Install the `vint_train` packages (run this inside the `vint_release/` directory):
-    ```bash
-    pip install -e train/
-    ```
-6. Install the `diffusion_policy` package from this [repo](https://github.com/real-stanford/diffusion_policy):
-    ```bash
-    git clone git@github.com:real-stanford/diffusion_policy.git
-    pip install -e diffusion_policy/
-    ```
-7. (Recommended) Install [tmux](https://github.com/tmux/tmux/wiki/Installing) if not present.
-    Many of the bash scripts rely on tmux to launch multiple screens with different commands. This will be useful for debugging because you can see the output of each screen.
+- The `exe.sh` script provides a menu to choose:
+  - Setup
+  - Run
+  - Tune
+  - Train
+  - Cleanup
 
-#### Hardware Requirements
-- LoCoBot: http://locobot.org (just the navigation stack)
-- A wide-angle RGB camera: [Example](https://www.amazon.com/ELP-170degree-Fisheye-640x480-Resolution/dp/B00VTHD17W). The `vint_locobot.launch` file uses camera parameters that work with cameras like the ELP fisheye wide angle, feel free to modify to your own. Adjust the camera parameters in `vint_release/deployment/config/camera.yaml` your camera accordingly (used for visualization).
-- [Joystick](https://www.amazon.com/Logitech-Wireless-Nano-Receiver-Controller-Vibration/dp/B0041RR0TW)/[keyboard teleop](http://wiki.ros.org/teleop_twist_keyboard) that works with Linux. Add the index mapping for the _deadman_switch_ on the joystick to the `vint_release/deployment/config/joystick.yaml`. You can find the mapping from buttons to indices for common joysticks in the [wiki](https://wiki.ros.org/joy). 
+---
 
+## `Setup`
 
-### Loading the model weights
+### Purpose
 
-Save the model weights *.pth file in `vint_release/deployment/model_weights` folder. Our model's weights are in [this link](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing).
+The `setup.sh` script sets up the environment and necessary configurations for the project.
 
-### Collecting a Topological Map
+### Script Breakdown
 
-_Make sure to run these scripts inside the `vint_release/deployment/src/` directory._
+- **Setup Paths:**
+  Determines the directory of the script and sets the current working path.
 
+- **Create Configuration Files:**
+  Generates `path.yaml` and `navigate.yaml` files with project-specific configurations.
 
-This section discusses a simple way to create a topological map of the target environment for deployment. For simplicity, we will use the robot in “path-following” mode, i.e. given a single trajectory in an environment, the task is to follow the same trajectory to the goal. The environment may have new/dynamic obstacles, lighting variations etc.
+- **Run Colcon Build:**
+  Compiles the nomad package.
 
-#### Record the rosbag: 
-```bash
-./record_bag.sh <bag_name>
-```
+- **Download Model Weights:**
+  Downloads the `nomad.pth` from [Google drive](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg).
 
-Run this command to teleoperate the robot with the joystick and camera. This command opens up three windows 
-1. `roslaunch vint_locobot.launch`: This launch file opens the `usb_cam` node for the camera, the joy node for the joystick, and nodes for the robot’s mobile base.
-2. `python joy_teleop.py`: This python script starts a node that reads inputs from the joy topic and outputs them on topics that teleoperate the robot’s base.
-3. `rosbag record /usb_cam/image_raw -o <bag_name>`: This command isn’t run immediately (you have to click Enter). It will be run in the vint_release/deployment/topomaps/bags directory, where we recommend you store your rosbags.
+- **Update Submodule:**
+  Updates the `diffusion_policy` [submodule](https://github.com/real-stanford/diffusion_policy).
 
-Once you are ready to record the bag, run the `rosbag record` script and teleoperate the robot on the map you want the robot to follow. When you are finished with recording the path, kill the `rosbag record` command, and then kill the tmux session.
+- **Create Conda Environment:**
+  Creates Conda environments (`deploy_nomad` and `train_nomad`) based on YAML configuration files.
 
-#### Make the topological map: 
-```bash
-./create_topomap.sh <topomap_name> <bag_filename>
-```
+- **Install Packages in Environments:**
+  Installs required packages in the created Conda environments.
 
-This command opens up 3 windows:
-1. `roscore`
-2. `python create_topomap.py —dt 1 —dir <topomap_dir>`: This command creates a directory in `/vint_release/deployment/topomaps/images` and saves an image as a node in the map every second the bag is played.
-3. `rosbag play -r 1.5 <bag_filename>`: This command plays the rosbag at x5 speed, so the python script is actually recording nodes 1.5 seconds apart. The `<bag_filename>` should be the entire bag name with the .bag extension. You can change this value in the `make_topomap.sh` file. The command does not run until you hit Enter, which you should only do once the python script gives its waiting message. Once you play the bag, move to the screen where the python script is running so you can kill it when the rosbag stops playing.
+---
 
-When the bag stops playing, kill the tmux session.
+## `Tune`
 
+### Purpose
 
-### Running the model 
-#### Navigation
-_Make sure to run this script inside the `vint_release/deployment/src/` directory._
+The `tune.sh` script allows users to adjust various parameters of the project by modifying the values in the `navigate.yaml`, `model.yaml`, and `controller.yaml` configuration files. This script provides an interactive menu to choose and update specific parameters.
 
-```bash
-./navigate.sh “--model <model_name> --dir <topomap_dir>”
-```
+### Parameters
 
-To deploy one of the models from the published results, we are releasing model checkpoints that you can download from [this link](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing).
+The script allows tuning of the following parameters:
 
+- **Maximum linear velocity of the model (`v_max`):**
+  Controls the maximum linear speed of the model in the navigation process.
 
-The `<model_name>` is the name of the model in the `vint_release/deployment/config/models.yaml` file. In this file, you specify these parameters of the model for each model (defaults used):
-- `config_path` (str): path of the *.yaml file in `vint_release/train/config/` used to train the model
-- `ckpt_path` (str): path of the *.pth file in `vint_release/deployment/model_weights/`
+- **Maximum angular velocity of the model (`w_max`):**
+  Controls the maximum angular speed of the model in the navigation process.
 
+- **Model loop frequency (`hz`):**
+  Sets the frequency at which the model's control loop runs.
 
-Make sure these configurations match what you used to train the model. The configurations for the models we provided the weights for are provided in yaml file for your reference.
+- **Graph update frequency (`graph_hz`):**
+  Determines how often the graph visualization updates.
 
-The `<topomap_dir>` is the name of the directory in `vint_release/deployment/topomaps/images` that has the images corresponding to the nodes in the topological map. The images are ordered by name from 0 to N.
+- **Number of samples (`num_samples`):**
+  Specifies the number of samples used in the model's prediction.
 
-This command opens up 4 windows:
+- **Radius (`radius`):**
+  Defines the radius within which topomap images are compared.
 
-1. `roslaunch vint_locobot.launch`: This launch file opens the usb_cam node for the camera, the joy node for the joystick, and several nodes for the robot’s mobile base).
-2. `python navigate.py --model <model_name> -—dir <topomap_dir>`: This python script starts a node that reads in image observations from the `/usb_cam/image_raw` topic, inputs the observations and the map into the model, and publishes actions to the `/waypoint` topic.
-3. `python joy_teleop.py`: This python script starts a node that reads inputs from the joy topic and outputs them on topics that teleoperate the robot’s base.
-4. `python pd_controller.py`: This python script starts a node that reads messages from the `/waypoint` topic (waypoints from the model) and outputs velocities to navigate the robot’s base.
+- **Goal node (`goal_node`):**
+  Indicates the specific goal node in the topomap.
 
-When the robot is finishing navigating, kill the `pd_controller.py` script, and then kill the tmux session. If you want to take control of the robot while it is navigating, the `joy_teleop.py` script allows you to do so with the joystick.
+- **Number of diffusion iterations (`num_diffusion_iters`):**
+  Sets the number of iterations for the diffusion process in the model.
 
-#### Exploration
-_Make sure to run this script inside the `vint_release/deployment/src/` directory._
+- **Length of future predictions (`len_traj_pred`):**
+  Defines the length of the trajectory predictions made by the model.
 
-```bash
-./exploration.sh “--model <model_name>”
-```
+- **Context size (`context_size`):**
+  Determines the number of images from the topic that are compared.
 
-To deploy one of the models from the published results, we are releasing model checkpoints that you can download from [this link](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing).
+- **Maximum linear velocity of the robot (`v_max` in `controller.yaml`):**
+  Sets the maximum linear speed of the robot controlled by the PD controller.
+
+- **Maximum angular velocity of the robot (`w_max` in `controller.yaml`):**
+  Sets the maximum angular speed of the robot controlled by the PD controller.
+
+- **Controller loop frequency (`frame_rate`):**
+  Defines the frequency at which the PD controller's control loop runs.
+
+- **Controller waypoint timeout (`waypoint_timeout`):**
+  Specifies the timeout period for the PD controller's waypoints.
+
+- **Waypoint (`waypoint`):**
+  Sets the specific waypoint for navigation.
+
+- **Close threshold (`close_threshold`):**
+  Defines the threshold distance for considering the goal as reached in the navigation process.
 
+### Script Breakdown
 
-The `<model_name>` is the name of the model in the `vint_release/deployment/config/models.yaml` file (note that only NoMaD works for exploration). In this file, you specify these parameters of the model for each model (defaults used):
-- `config_path` (str): path of the *.yaml file in `vint_release/train/config/` used to train the model
-- `ckpt_path` (str): path of the *.pth file in `vint_release/deployment/model_weights/`
+Upon `tune.sh` selection, the current value of the parameter is displayed, and users are prompted to enter a new value. The script then updates the respective YAML configuration file with the new value.
 
+---
 
-Make sure these configurations match what you used to train the model. The configurations for the models we provided the weights for are provided in yaml file for your reference.
+## `Run`
 
-The `<topomap_dir>` is the name of the directory in `vint_release/deployment/topomaps/images` that has the images corresponding to the nodes in the topological map. The images are ordered by name from 0 to N.
+### Purpose
 
-This command opens up 4 windows:
+The `run.sh` script is designed to collect new trajectories, create data from recorded bags, generate topomaps, and navigate with the trajectory.
 
-1. `roslaunch vint_locobot.launch`: This launch file opens the usb_cam node for the camera, the joy node for the joystick, and several nodes for the robot’s mobile base.
-2. `python explore.py --model <model_name>`: This python script starts a node that reads in image observations from the `/usb_cam/image_raw` topic, inputs the observations and the map into the model, and publishes exploration actions to the `/waypoint` topic.
-3. `python joy_teleop.py`: This python script starts a node that reads inputs from the joy topic and outputs them on topics that teleoperate the robot’s base.
-4. `python pd_controller.py`: This python script starts a node that reads messages from the `/waypoint` topic (waypoints from the model) and outputs velocities to navigate the robot’s base.
+### Script Breakdown
 
-When the robot is finishing navigating, kill the `pd_controller.py` script, and then kill the tmux session. If you want to take control of the robot while it is navigating, the `joy_teleop.py` script allows you to do so with the joystick.
+- **Bag Name Input:**
+  Prompts the user to enter a name for the bag file.
 
+- **Collect Trajectory:**
+  Prompts the user to start recording a new bag file and handle data collection.
 
-### Adapting this code to different robots
+- **Create Training Data:**
+  Uses the recorded bag to create training data and displays it.
 
-We hope that this codebase is general enough to allow you to deploy it to your favorite ROS-based robots. You can change the robot configuration parameters in `vint_release/deployment/config/robot.yaml`, like the max angular and linear velocities of the robot and the topics to publish to teleop and control the robot. Please feel free to create a Github Issue or reach out to the authors at shah@cs.berkeley.edu.
+- **Create Topomap:**
+  Uses the recorded bag to generate topomap.
 
+- **Navigate:**
+  Initiates the navigation process using the collected trajectory and created topomap.
 
-## Citing
-```
-@inproceedings{shah2022gnm,
-  author    = {Dhruv Shah and Ajay Sridhar and Arjun Bhorkar and Noriaki Hirose and Sergey Levine},
-  title     = {{GNM: A General Navigation Model to Drive Any Robot}},
-  booktitle = {International Conference on Robotics and Automation (ICRA)},
-  year      = {2023},
-  url       = {https://arxiv.org/abs/2210.03370}
-}
+### Key Commands and Parameters
 
-@inproceedings{shah2023vint,
-  title     = {Vi{NT}: A Foundation Model for Visual Navigation},
-  author    = {Dhruv Shah and Ajay Sridhar and Nitish Dashora and Kyle Stachowicz and Kevin Black and Noriaki Hirose and Sergey Levine},
-  booktitle = {7th Annual Conference on Robot Learning},
-  year      = {2023},
-  url       = {https://arxiv.org/abs/2306.14846}
-}
+- **Collect Trajectory:**
+  Records image and odometry data into a ROS bag file.
+  ```bash
+  ros2 bag record /cam0/image_raw /odom/local -o src/nomad/preprocessing/rosbags/$bag_name
+  ```
+  - `-o`: Output path for the bag file.
+  - `/cam0/image_raw`: Topic for image data.
+  - `/odom/local`: Topic for odometry data.
+  - **Explanation:** This command records the data from the specified topics (`/cam0/image_raw` and `/odom/local`) and saves it in a ROS bag file named `$bag_name` in the specified output directory.
 
-@article{sridhar2023nomad,
-  author  = {Ajay Sridhar and Dhruv Shah and Catherine Glossop and Sergey Levine},
-  title   = {{NoMaD: Goal Masked Diffusion Policies for Navigation and Exploration}},
-  journal = {arXiv pre-print},
-  year    = {2023},
-  url     = {https://arxiv.org/abs/2310.xxxx}
-}
-```
+- **Create Training Data:**
+  Processes the recorded bag to generate training data.
+  ```bash
+  python3 src/nomad/preprocessing/process_bag_diff.py -i src/nomad/preprocessing/rosbags/$bag_name -o src/nomad/preprocessing/training_data -n -1 -s 4.0 -c /cam0/image_raw -d /odom/local
+  ```
+  - `-i`: Input path to the recorded bag file.
+  - `-o`: Output path for the training data.
+  - `-n`: Number of data points to generate.
+  - `-s`: Step size for sampling data.
+  - `-c`: Image topic.
+  - `-d`: Odom topic.
+  - **Explanation:** This command processes the recorded bag file to generate training data, using the specified parameters such as the number of data points, step size, image topic, and odom topic.
+
+  ```bash
+  python3 src/nomad/preprocessing/pickle_data.py -f src/nomad/preprocessing/training_data/${bag_name}_0/traj_data.pkl -g
+  ```
+  - `-f`: Path to the trajectory data pickle file.
+  - `-g`: Flag to plot the graph of positions (x, y) and yaw.
+  - **Explanation:** This command plots the graph of positions and yaw of the processed data, ensuring it is collected without any error.
+
+- **Create Topomap:**
+  Generates a topological map of the environment from the images recorded in the bag file.
+  ```bash
+  ros2 run nomad create_topomap.py -b src/nomad/preprocessing/rosbags/$bag_name -T src/nomad/preprocessing/topomap -d $bag_name -i /cam0/image_raw -t 1.0 -w 1
+  ```
+  - `-b`: Path to the bag file.
+  - `-T`: Path to the topomap directory.
+  - `-d`: Directory name for the topomap images.
+  - `-i`: Image topic.
+  - `-t`: Time interval between images.
+  - `-w`: Number of worker threads.
+  - **Explanation:** This command creates a topological map from the images recorded in the specified bag file. The images are saved in the specified topomap directory, with a specified time interval between them. The number of worker threads used for processing is also specified.
+
+- **Navigate:**
+  Runs the PD controller and the navigation script to start navigating based on the created topomap.
+  ```bash
+  ros2 run nomad pd_controller.py
+  ```
+  - **Explanation:** This command starts the Proportional-Derivative (PD) controller which is responsible for driving the robot based on the waypoints generated.
+
+  ```bash
+  ros2 run nomad navigate.py --ros-args --params-file src/nomad/deploy/config/navigate.yaml --remap /img:=/cam0/image_raw
+  ```
+  - `--ros-args`: Passes ROS arguments.
+  - `--params-file`: Path to the parameter file.
+  - `--remap /img:=/cam0/image_raw`: Remaps the image topic.
+  - **Explanation:** This command runs the navigation script, which uses the PD controller and the generated topomap to navigate through the environment. The image topic is remapped to ensure the correct image data is used during navigation.
+
+---
+
+## `Train`
+
+### Purpose
+
+The `train.sh` script is used to train the Nomad model. It allows for training from scratch or continuing training from a previous checkpoint.
+
+### Script Breakdown
+
+- **Training Mode Prompt:**
+  Prompts the user to choose whether to train from scratch or continue training from a previous checkpoint.
+
+- **Configuration Adjustments:**
+  Comments or uncomments the `load_run` line in the `model.yaml` configuration file based on the user's choice.
+
+- **Activate Conda Environment:**
+  Activates the `train_nomad` Conda environment.
+
+- **Run Data Split and Training:**
+  Executes the `data_split.py` and `train.py` scripts to split the data and train the model.
+
+### Commands
+
+- **Data Split:**
+  ```bash
+  python3 data_split.py
+  ```
+
+- **Training:**
+  ```bash
+  python3 train.py
+  ```
+
+### Parameters
+
+- **train_from_scratch:** Determines whether to train from scratch or continue from a previous checkpoint.
+- **model_weights_path:** Path to the model weights file.
+- **model_config_path:** Path to the model configuration file.
+
+---
+
+## `Cleanup`
+
+### Purpose
+
+The `cleanup.sh` script is used to clean up the environment by removing collected data, training logs, and uninstallation of environments and dependencies. This will reset the repository to its initial state.
+
+### Options
+
+1. **Delete Collected Data:**
+   - Removes all collected data including rosbags, topomaps, and training data.
+
+2. **Clear Training Logs:**
+   - Clears all training logs, including wandb cache and data splits.
+
+3. **Select What to Remove:**
+   - Allows the user to select specific items to remove, such as pycache, deploy config files, diffusion policy, etc.
+
+4. **Cleanup:**
+   - Removes everything related to the project from the workspace, ensuring the workspace is in a state similar to a freshly cloned repository.
+
+5. **Uninstall:**
+   - Removes everything related to the project from the system, including Conda environments, ensuring the system is in a state similar to a freshly cloned repository.
