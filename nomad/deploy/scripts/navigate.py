@@ -173,7 +173,7 @@ class Navigate(Node):
 
                 mask = torch.zeros(1).long().to(self.device)
 
-                start = max(self.closest_node, 0)
+                start = max(self.closest_node - self.radius*self.skip, 0)
                 end = min(self.closest_node + self.radius*self.skip + 1, self.goal_node)
 
                 selected_images = [self.topomap[i] for i in range(start, end + 1, self.skip)]
