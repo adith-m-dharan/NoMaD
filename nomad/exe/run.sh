@@ -83,6 +83,7 @@ navigate() {
 main_menu() {
     while true; do
     	clear
+    	echo "Bag Name: $bag_name"
         echo "Choose an option:"
         echo "1. Collect trajectory"
         echo "2. Create training data"
