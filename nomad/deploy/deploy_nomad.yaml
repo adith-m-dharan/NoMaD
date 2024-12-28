@@ -27,3 +27,4 @@ dependencies:
   - transforms3d
   - scipy==1.7.3
   - sympy==1.12
+  - huggingface_hub==0.11.1

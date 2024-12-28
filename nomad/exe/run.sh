@@ -10,7 +10,7 @@ controller_config="src/nomad/deploy/config/controller.yaml"
 rosbag_dir="src/nomad/preprocessing/rosbags/$bag_name"
 training_data_dir="src/nomad/preprocessing/training_data"
 topomap_dir="src/nomad/preprocessing/topomap"
-cam_topic="/cam0/image_raw"
+cam_topic="image_raw"
 odom_topic="/odom/local"
 
 # Function to setup session
