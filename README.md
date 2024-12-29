@@ -87,12 +87,6 @@ The script allows tuning of the following parameters:
 - **Maximum angular velocity of the model (`w_max`):**
   Controls the maximum angular speed of the model in the navigation process.
 
-- **Model loop frequency (`hz`):**
-  Sets the frequency at which the model's control loop runs.
-
-- **Graph update frequency (`graph_hz`):**
-  Determines how often the graph visualization updates.
-
 - **Number of samples (`num_samples`):**
   Specifies the number of samples used in the model's prediction.
 
@@ -108,26 +102,17 @@ The script allows tuning of the following parameters:
 - **Length of future predictions (`len_traj_pred`):**
   Defines the length of the trajectory predictions made by the model.
 
-- **Context size (`context_size`):**
-  Determines the number of images from the topic that are compared.
-
 - **Maximum linear velocity of the robot (`v_max` in `controller.yaml`):**
   Sets the maximum linear speed of the robot controlled by the PD controller.
 
 - **Maximum angular velocity of the robot (`w_max` in `controller.yaml`):**
   Sets the maximum angular speed of the robot controlled by the PD controller.
 
-- **Controller loop frequency (`frame_rate`):**
-  Defines the frequency at which the PD controller's control loop runs.
-
 - **Controller waypoint timeout (`waypoint_timeout`):**
-  Specifies the timeout period for the PD controller's waypoints.
+  Specifies the timeout period for the controller's waypoints.
 
-- **Waypoint (`waypoint`):**
-  Sets the specific waypoint for navigation.
-
-- **Close threshold (`close_threshold`):**
-  Defines the threshold distance for considering the goal as reached in the navigation process.
+- **Naction (`n_value`):**
+  Selects the sampled acton.
 
 ### Script Breakdown
 
