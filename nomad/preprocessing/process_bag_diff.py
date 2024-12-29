@@ -12,10 +12,6 @@ from rosidl_runtime_py.utilities import get_message
 from process_data_utils import get_images_and_odom, reverse_rgb
 
 def main(args: argparse.Namespace):
-    # Load the config file if needed
-    # with open("/home/flo/flo_nav_ws/my_bag/process_bag/process_bags.yaml", "r") as f:
-    #     config = yaml.load(f, Loader=yaml.FullLoader)
-
     # Create output directory if it doesn't exist
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
