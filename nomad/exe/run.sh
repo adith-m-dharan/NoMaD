@@ -68,7 +68,7 @@ create_topomap() {
 navigate() {
     tmux new-session -d -s navigation -n navigator bash -c "
         $(setup deploy_nomad controller 0)
-        ros2 run nomad pd_controller.py --ros-args --params-file $controller_config
+        ros2 run nomad controller.py --ros-args --params-file $controller_config
     "
     tmux split-window -v -t navigation:navigator bash -c "
         $(setup deploy_nomad navigation 5)

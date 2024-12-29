@@ -51,6 +51,8 @@ class Navigate(Node):
         self.skip = self.declare_parameter("skip", 1).value
         self.tolerence = self.declare_parameter("tolerence", 0).value
 
+        self.n_value = self.declare_parameter("n_value", 0).value
+
         self.load_params()
         self.load_topomap()
         self.init_comms()
@@ -178,7 +180,7 @@ class Navigate(Node):
 
                 selected_images = [self.topomap[i] for i in range(start, end + 1, self.skip)]
 
-                image_names = [os.path.basename(img.filename) for img in selected_images]
+                #image_names = [os.path.basename(img.filename) for img in selected_images]
                 #print(f"Start: {start}, End: {end}")
                 #print("Selected images:", ", ".join(image_names))
 
@@ -205,7 +207,7 @@ class Navigate(Node):
                 dists = to_numpy(dists.flatten())
                 min_idx = np.argmin(dists)
                 self.closest_node = min_idx*self.skip + start
-                self.get_logger().info(f"Goal node : {self.goal_node}    |   Closest node : {self.closest_node}")
+                self.get_logger().info(f"    Goal node : {self.goal_node}    |   Closest node : {self.closest_node}")
                 sg_idx = min(min_idx + int(dists[min_idx] <
                                         self.close_threshold), len(obsgoal_cond) - 1)
                 obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)
@@ -227,7 +229,7 @@ class Navigate(Node):
                     self.noise_scheduler.set_timesteps(
                         self.num_diffusion_iters)
 
-                    start_time = self.get_clock().now()
+                    #start_time = self.get_clock().now()
                     for k in self.noise_scheduler.timesteps[:]:
                         # predict noise
                         noise_pred = self.model(
@@ -247,17 +249,17 @@ class Navigate(Node):
                 sampled_actions_msg = Float32MultiArray()
                 sampled_actions_msg.data = np.concatenate(
                     (np.array([0]), naction.flatten())).tolist()
-                self.get_logger().info("published sampled actions")
+                #self.get_logger().info("published sampled actions")
 
                 if rclpy.ok():
                     self.sampled_actions_pub.publish(sampled_actions_msg)
-                naction = naction[0]
+                naction = naction[self.n_value]
                 chosen_waypoint = naction[self.waypoint]
 
             # recovery
             if self.model_params["normalize"]:
                 chosen_waypoint[:2] *= (self.v_max/self.hz)
-            # print(chosen_waypoint)
+            #print(chosen_waypoint)
             waypoint_msg = Float32MultiArray()
             waypoint_msg.data = chosen_waypoint.tolist()
 

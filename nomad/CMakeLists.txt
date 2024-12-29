@@ -17,7 +17,7 @@ install(PROGRAMS
     deploy/scripts/navigate.py
     deploy/scripts/create_topomap.py
     deploy/scripts/utils.py
-    deploy/scripts/pd_controller.py
+    deploy/scripts/controller.py
     deploy/scripts/ros_data.py
     DESTINATION lib/${PROJECT_NAME})
 

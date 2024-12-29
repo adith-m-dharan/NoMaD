@@ -17,7 +17,7 @@ from utils import clip_angle
 
 class PDController(Node):
     def __init__(self):
-        super().__init__('pd_controller')
+        super().__init__('controller')
 
         self.v_max = self.declare_parameter("v_max", 0.2).value
         self.w_max = self.declare_parameter("w_max", 0.2).value
@@ -73,7 +73,7 @@ class PDController(Node):
     def callback_reached_goal(self, reached_goal_msg: Bool):
         self.reached_goal = reached_goal_msg.data
 
-    def pd_controller(self, waypoint: np.ndarray) -> Tuple[float, float]:
+    def controller(self, waypoint: np.ndarray) -> Tuple[float, float]:
         assert len(waypoint) == 2 or len(
             waypoint) == 4, "waypoint must be a 2D or 4D vector"
         if len(waypoint) == 2:
@@ -103,7 +103,7 @@ class PDController(Node):
             self.get_logger().info("Reached goal! Stopping...")
             return
         elif self.waypoint.is_valid(verbose=True):
-            v, w = self.pd_controller(self.waypoint.get())
+            v, w = self.controller(self.waypoint.get())
             if self.reverse_mode:
                 v *= -1
             vel_msg.linear.x = v

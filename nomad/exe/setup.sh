@@ -78,7 +78,8 @@ create_config_files() {
     v_max: 0.2
     w_max: 0.2
     hz: 4.0
-    graph_hz: 0.33"
+    graph_hz: 0.33
+    n_value: 0"
     mkdir -p "$(dirname "$navigate_output_path")"
     echo "$navigate_content" > "$navigate_output_path"
     
@@ -107,9 +108,7 @@ download_nomad_pth() {
 
     echo "Getting model weights.."
     mkdir -p "${DOWNLOAD_DIR}"
-    pip install gdown > /dev/null 2>&1
     gdown ${FILE_ID} -O "${DOWNLOAD_DIR}/${FILE_NAME}"
-    pip uninstall gdown -y > /dev/null 2>&1
 }
 
 # Create Conda environment if needed
@@ -176,7 +175,7 @@ main_menu() {
         echo "1. Full installation"
         echo "2. Installation for deployment"
         echo "3. Installation for training"
-        echo "4. Installation without creating conda env"
+        echo "4. Installation without conda"
         echo "5. Custom installation"
         echo "9. Back"
         echo "0. Exit"

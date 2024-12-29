@@ -45,13 +45,8 @@ main_menu() {
         echo "I. Maximum angular velocity of the robot (current: $(show "$CONTROLLER_YAML" "w_max"))"
         echo "J. Number of diffusion iterations (current: $(show "$MODEL_YAML" "num_diffusion_iters"))"
         echo "K. Length of future predictions (current: $(show "$MODEL_YAML" "len_traj_pred"))"
-        echo "L. Images from topic to be compared (current: $(show "$MODEL_YAML" "context_size"))"
-        echo "M. Controller loop frequency (current: $(show "$CONTROLLER_YAML" "frame_rate"))"
-        echo "N. Model loop frequency (current: $(show "$NAVIGATE_YAML" "hz"))"
-        echo "O. Graph frequency (current: $(show "$NAVIGATE_YAML" "graph_hz"))"
-        echo "P. Number of samples (current: $(show "$NAVIGATE_YAML" "num_samples"))"
-        echo "Q. Waypoint (current: $(show "$NAVIGATE_YAML" "waypoint"))"
-        echo "R. Close threshold (current: $(show "$NAVIGATE_YAML" "close_threshold"))"
+        echo "L. Number of samples (current: $(show "$NAVIGATE_YAML" "num_samples"))"
+        echo "M. Naction value (current: $(show "$NAVIGATE_YAML" "n_value"))"
         echo "Z. Back"
         echo "X. Exit"
         read -p "Enter your choice: " choice
@@ -69,13 +64,8 @@ main_menu() {
 	    I) tune "w_max" "$CONTROLLER_YAML" ;;
 	    J) tune "num_diffusion_iters" "$MODEL_YAML" ;;
 	    K) tune "len_traj_pred" "$MODEL_YAML" ;;
-	    L) tune "context_size" "$MODEL_YAML" ;;
-	    M) tune "frame_rate" "$CONTROLLER_YAML" ;;
-	    N) tune "hz" "$NAVIGATE_YAML" ;;
-	    O) tune "graph_hz" "$NAVIGATE_YAML" ;;
-	    P) tune "num_samples" "$NAVIGATE_YAML" ;;
-	    Q) tune "waypoint" "$NAVIGATE_YAML" ;;
-	    R) tune "close_threshold" "$NAVIGATE_YAML" ;;
+	    L) tune "num_samples" "$NAVIGATE_YAML" ;;
+	    M) tune "n_value" "$NAVIGATE_YAML" ;;
 
             Z)
                 ./src/exe.sh
