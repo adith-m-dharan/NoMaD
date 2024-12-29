@@ -191,12 +191,12 @@ The `run.sh` script is designed to collect new trajectories, create data from re
 - **Navigate:**
   Runs the PD controller and the navigation script to start navigating based on the created topomap.
   ```bash
-  ros2 run nomad pd_controller.py
+  ros2 run nomad controller.py --ros-args --params-file src/nomad/deploy/config/controller.yaml
   ```
-  - **Explanation:** This command starts the Proportional-Derivative (PD) controller which is responsible for driving the robot based on the waypoints generated.
+  - **Explanation:** This command starts the controller which is responsible for driving the robot based on the waypoints generated.
 
   ```bash
-  ros2 run nomad navigate.py --ros-args --params-file src/nomad/deploy/config/navigate.yaml --remap /img:=/cam0/image_raw
+  ros2 run nomad navigate.py --ros-args --params-file src/nomad/deploy/config/navigate.yaml --remap /img:=/image_raw
   ```
   - `--ros-args`: Passes ROS arguments.
   - `--params-file`: Path to the parameter file.

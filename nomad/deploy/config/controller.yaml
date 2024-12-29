@@ -1,4 +1,4 @@
-pd_controller:
+controller:
   ros__parameters:
     v_max: 1.0
     w_max: 0.5

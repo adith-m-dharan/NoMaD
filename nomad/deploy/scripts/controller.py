@@ -67,7 +67,7 @@ class PDController(Node):
         self.get_logger().info("Initialized communication")
 
     def callback_drive(self, waypoint_msg: Float32MultiArray):
-        self.get_logger().info("Setting waypoint")
+        # self.get_logger().info("Setting waypoint")
         self.waypoint.set(waypoint_msg.data)
 
     def callback_reached_goal(self, reached_goal_msg: Bool):
