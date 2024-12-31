@@ -54,7 +54,7 @@ class PDController(Node):
 
         self.vel_pub = self.create_publisher(
             Twist,
-            "/cmd_vel",
+            "/vel",
             10
         )
 

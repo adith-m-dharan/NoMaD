@@ -11,7 +11,8 @@ rosbag_dir="src/nomad/preprocessing/rosbags/$bag_name"
 training_data_dir="src/nomad/preprocessing/training_data"
 topomap_dir="src/nomad/preprocessing/topomap"
 cam_topic="image_raw"
-odom_topic="/odom/local"
+odom_topic="/odom"
+vel_topic="/cmd_vel"
 
 # Function to setup session
 setup() {
@@ -68,7 +69,7 @@ create_topomap() {
 navigate() {
     tmux new-session -d -s navigation -n navigator bash -c "
         $(setup deploy_nomad controller 0)
-        ros2 run nomad controller.py --ros-args --params-file $controller_config
+        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
     "
     tmux split-window -v -t navigation:navigator bash -c "
         $(setup deploy_nomad navigation 5)
