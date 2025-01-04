@@ -15,7 +15,7 @@ from ros_data import ROSData
 from utils import clip_angle
 
 
-class PDController(Node):
+class Controller(Node):
     def __init__(self):
         super().__init__('controller')
 
@@ -114,7 +114,7 @@ class PDController(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PDController()
+    node = Controller()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
 

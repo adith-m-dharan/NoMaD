@@ -103,10 +103,10 @@ The script allows tuning of the following parameters:
   Defines the length of the trajectory predictions made by the model.
 
 - **Maximum linear velocity of the robot (`v_max` in `controller.yaml`):**
-  Sets the maximum linear speed of the robot controlled by the PD controller.
+  Sets the maximum linear speed of the robot controlled by the controller.
 
 - **Maximum angular velocity of the robot (`w_max` in `controller.yaml`):**
-  Sets the maximum angular speed of the robot controlled by the PD controller.
+  Sets the maximum angular speed of the robot controlled by the controller.
 
 - **Controller waypoint timeout (`waypoint_timeout`):**
   Specifies the timeout period for the controller's waypoints.
@@ -189,7 +189,7 @@ The `run.sh` script is designed to collect new trajectories, create data from re
   - **Explanation:** This command creates a topological map from the images recorded in the specified bag file. The images are saved in the specified topomap directory, with a specified time interval between them. The number of worker threads used for processing is also specified.
 
 - **Navigate:**
-  Runs the PD controller and the navigation script to start navigating based on the created topomap.
+  Runs the controller and the navigation script to start navigating based on the created topomap.
   ```bash
   ros2 run nomad controller.py --ros-args --params-file src/nomad/deploy/config/controller.yaml
   ```
@@ -201,7 +201,7 @@ The `run.sh` script is designed to collect new trajectories, create data from re
   - `--ros-args`: Passes ROS arguments.
   - `--params-file`: Path to the parameter file.
   - `--remap /img:=/cam0/image_raw`: Remaps the image topic.
-  - **Explanation:** This command runs the navigation script, which uses the PD controller and the generated topomap to navigate through the environment. The image topic is remapped to ensure the correct image data is used during navigation.
+  - **Explanation:** This command runs the navigation script, which uses the controller and the generated topomap to navigate through the environment. The image topic is remapped to ensure the correct image data is used during navigation.
 
 ---
 
