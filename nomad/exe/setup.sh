@@ -60,8 +60,8 @@ create_config_files() {
     mkdir -p "$(dirname "$output_path")"
     echo "$dataset_content" > "$output_path"
 
-    local navigate_output_path="$current_path/nomad/deploy/config/navigate.yaml"
-    local navigate_content="nomad_navigator:
+    local navigate_output_path="$current_path/nomad/deploy/config/nomad.yaml"
+    local navigate_content="nomad:
   ros__parameters:
     model_name: \"nomad\"
     model_weights_path: \"$current_path/nomad/deploy/model_weights/nomad.pth\"

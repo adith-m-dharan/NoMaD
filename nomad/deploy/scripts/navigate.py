@@ -24,7 +24,7 @@ from vint_train.training.train_utils import get_action
 
 class Navigate(Node):
     def __init__(self):
-        super().__init__('nomad_navigator')
+        super().__init__('nomad')
         self.model_name = self.declare_parameter(
             "model_name", "nomad").value
         self.model_weights_path = self.declare_parameter(

@@ -5,13 +5,13 @@ echo "Enter bag name: "
 read bag_name
 
 # Define variables for directories and topic names
-navigate_config="src/nomad/deploy/config/navigate.yaml"
+model_config="src/nomad/deploy/config/nomad.yaml"
 controller_config="src/nomad/deploy/config/controller.yaml"
 rosbag_dir="src/nomad/preprocessing/rosbags/$bag_name"
 training_data_dir="src/nomad/preprocessing/training_data"
 topomap_dir="src/nomad/preprocessing/topomap"
 cam_topic="image_raw"
-odom_topic="/odom"
+odom_topic="/odom_topic"
 vel_topic="/cmd_vel"
 
 # Function to setup session
@@ -73,11 +73,24 @@ navigate() {
     "
     tmux split-window -v -t navigation:navigator bash -c "
         $(setup deploy_nomad navigation 5)
-        sed -i 's|topomap/[^\"]*|topomap/$bag_name|' $navigate_config
-        ros2 run nomad navigate.py --ros-args --params-file $navigate_config --remap /img:=$cam_topic
+        sed -i 's|topomap/[^\"]*|topomap/$bag_name|' $model_config
+        ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$cam_topic
         $(cleanup navigation)
     "
     tmux attach -t navigation
+}
+
+explore() {
+    tmux new-session -d -s exploration -n explorer bash -c "
+        $(setup deploy_nomad controller 0)
+        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+    "
+    tmux split-window -v -t exploration:explorer bash -c "
+        $(setup deploy_nomad exploration 5)
+        ros2 run nomad explore.py --ros-args --params-file $model_config
+        $(cleanup exploration)
+    "
+    tmux attach -t exploration
 }
 
 # Main menu function
@@ -90,6 +103,7 @@ main_menu() {
         echo "2. Create training data"
         echo "3. Create topomap"
         echo "4. Navigate"
+        echo "5. Explore"
         echo "9. Back"
         echo "0. Exit"
 
@@ -108,6 +122,9 @@ main_menu() {
                 ;;
             4)
                 navigate
+                ;;
+            5)
+                explore
                 ;;
             9)
                 ./src/exe.sh

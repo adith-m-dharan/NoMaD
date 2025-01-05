@@ -1,0 +1,19 @@
+nomad:
+  ros__parameters:
+    model_name: "nomad"
+    model_weights_path: "/home/adith/Git/nomad_ws/src/nomad/deploy/model_weights/nomad.pth"
+    model_config_path: "/home/adith/Git/nomad_ws/src/nomad/train/config/model.yaml"
+    topomap_images_dir: "/home/adith/Git/nomad_ws/src/nomad/preprocessing/topomap"
+    topomap_dir: "/home/adith/Git/nomad_ws/src/nomad/preprocessing/topomap/bag02"
+    waypoint: 2
+    goal_node: -1
+    close_threshold: 3
+    radius: 4
+    skip: 1
+    tolerence: 0
+    num_samples: 8
+    v_max: 0.2
+    w_max: 0.2
+    hz: 4.0
+    graph_hz: 0.33
+    n_value: 0

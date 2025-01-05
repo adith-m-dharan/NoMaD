@@ -18,7 +18,7 @@ install(PROGRAMS
     deploy/scripts/create_topomap.py
     deploy/scripts/utils.py
     deploy/scripts/controller.py
-    deploy/scripts/ros_data.py
+    deploy/scripts/explore.py
     DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
