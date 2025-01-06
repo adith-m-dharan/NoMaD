@@ -82,13 +82,18 @@ navigate() {
 
 explore() {
     tmux new-session -d -s exploration -n explorer bash -c "
-        $(setup deploy_nomad controller 0)
-        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+        $(setup deploy_nomad record_bag 5)
+        ros2 bag record $cam_topic $odom_topic -o $rosbag_dir
+        $(cleanup record_bag)
     "
-    tmux split-window -v -t exploration:explorer bash -c "
+    tmux split-window -v -t exploration:explorer -p 90 bash -c "
         $(setup deploy_nomad exploration 5)
         ros2 run nomad explore.py --ros-args --params-file $model_config
         $(cleanup exploration)
+    "
+    tmux split-window -v -t exploration:explorer bash -c "
+        $(setup deploy_nomad controller 0)
+        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
     "
     tmux attach -t exploration
 }

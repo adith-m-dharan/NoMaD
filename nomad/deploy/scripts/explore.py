@@ -183,8 +183,8 @@ class Explore(Node):
                 waypoint_msg.data = chosen_waypoint.tolist()
                 self.get_logger().info(f"Publishing waypoint: {list(waypoint_msg.data)}")
                 self.waypoint_pub.publish(waypoint_msg)
-            else:
-                self.get_logger().info(f"Context queue not ready (current size: {len(self.context_queue)}, required: {self.context_size + 1})")
+            # else:
+            #     self.get_logger().info(f"Context queue not ready (current size: {len(self.context_queue)}, required: {self.context_size + 1})")
             rate.sleep()
 
 
