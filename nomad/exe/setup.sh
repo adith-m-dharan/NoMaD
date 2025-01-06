@@ -69,14 +69,14 @@ create_config_files() {
     topomap_images_dir: \"$current_path/nomad/preprocessing/topomap\"
     topomap_dir: \"$current_path/nomad/preprocessing/topomap/bag_name\"
     waypoint: 2
-    goal_node: -1
+    goal_node: -10
     close_threshold: 3
-    radius: 4
-    skip: 1
-    tolerence: 0
+    radius: 5
+    skip: 5
+    tolerence: 5
     num_samples: 8
-    v_max: 0.2
-    w_max: 0.2
+    v_max: 0.5
+    w_max: 0.5
     hz: 4.0
     graph_hz: 0.33
     n_value: 0"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Paths to the YAML files
-NAVIGATE_YAML="src/nomad/deploy/config/navigate.yaml"
+NAVIGATE_YAML="src/nomad/deploy/config/nomad.yaml"
 MODEL_YAML="src/nomad/train/config/model.yaml"
 CONTROLLER_YAML="src/nomad/deploy/config/controller.yaml"
 
