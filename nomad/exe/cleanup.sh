@@ -33,7 +33,7 @@ tasks=(
     "Delete wandb cache|${r}train/wandb"
     "Delete train logs|${r}train/logs"
     "Delete train config|${r}train/config/path.yaml"
-    "Delete deploy config|${r}deploy/config/navigate.yaml"
+    "Delete deploy config|${r}deploy/config/nomad.yaml"
     "Delete model weights|${r}deploy/model_weights"
     "Remove diffusion_policy|cd src/ && git submodule deinit -f --all > /dev/null 2>&1 && cd .."
     "Unbuild colcon|rm -rf build log install"
