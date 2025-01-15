@@ -38,18 +38,6 @@ class Explore(Node):
         self.graph_hz = self.declare_parameter("graph_hz", 0.333).value
 
         self.n_value = self.declare_parameter("n_value", 0).value
-        # # Hardcoded parameters
-        # self.model_name = "nomad"
-        # self.model_weights_path = "/home/adith/Downloads/nomad_ws/src/nomad/deploy/model_weights/nomad.pth"
-        # self.model_config_path = "/home/adith/Downloads/nomad_ws/src/nomad/train/config/model.yaml"
-        # self.waypoint = 2
-        # self.close_threshold = 3
-        # self.num_samples = 8
-        # self.v_max = 0.5
-        # self.w_max = 0.5
-        # self.hz = 4.0
-        # self.graph_hz = 0.33
-        # self.n_value = 0
 
         self.load_params()
         self.init_comms()
@@ -57,27 +45,17 @@ class Explore(Node):
         self.context_queue = []
 
     def load_params(self):
-        # self.get_logger().info(f"Model config path: {self.model_config_path}")
         assert os.path.isfile(self.model_config_path), \
             f"{self.model_config_path} is not a file. Model config path needs to point to a .yaml file"
 
         with open(self.model_config_path, "r") as fd:
             model_paths = yaml.safe_load(fd)
-        # self.get_logger().info(f"Loaded model paths")
 
-        # Check if the required fields are in the configuration
-        # required_keys = ["model_type", "context_size", "num_diffusion_iters"]
-        # for key in required_keys:
-        #     if key not in model_paths:
-        #         raise KeyError(f"Key '{key}' not found in the model configuration!")
 
         self.model_params = model_paths
         self.context_size = model_paths["context_size"]
         self.num_diffusion_iters = model_paths["num_diffusion_iters"]
 
-        # self.get_logger().info(f"Using model type: {self.model_params['model_type']}")
-
-        # Load model weights
         assert os.path.isfile(self.model_weights_path), \
             f"{self.model_weights_path} is not a file. Model weights path needs to point to a file"
 
@@ -99,7 +77,6 @@ class Explore(Node):
         )
 
     def init_comms(self):
-        # Initialize ROS2 communications
         self.image_sub = self.create_subscription(
             Image,
             "/image_raw",
@@ -112,26 +89,21 @@ class Explore(Node):
         self.get_logger().info("Initialized communications.")
 
     def image_callback(self, msg):
-        # self.get_logger().info("Image message received")
         img = msg_to_pil(msg)
         if self.context_size is None:
             return
 
         if len(self.context_queue) < self.context_size + 1:
             self.context_queue.append(img)
-            # self.get_logger().info(f"Context queue length: {len(self.context_queue)}")
         else:
             self.context_queue.pop(0)
             self.context_queue.append(img)
 
     def exploration_loop(self):
-        self.get_logger().info("Starting exploration loop...")
         rate = self.create_rate(self.hz)
         while rclpy.ok():
-            # self.get_logger().info("Exploration loop tick")
             waypoint_msg = Float32MultiArray()
             if len(self.context_queue) > self.context_size:
-                # self.get_logger().info("Context queue ready for processing")
                 obs_images = transform_images(self.context_queue, self.model_params["image_size"], center_crop=False)
                 obs_images = obs_images.to(self.device)
                 fake_goal = torch.randn((1, 3, *self.model_params["image_size"])).to(self.device)
@@ -174,7 +146,6 @@ class Explore(Node):
                 sampled_actions_msg.data = np.concatenate((np.array([0]), naction.flatten())).tolist()
                 self.sampled_actions_pub.publish(sampled_actions_msg)
 
-                # Choose and publish waypoint from /waypoint_topic
                 naction = naction[self.n_value]
                 chosen_waypoint = naction[self.waypoint]
 

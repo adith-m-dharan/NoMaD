@@ -15,14 +15,19 @@ confirm_and_execute() {
     local prompt_message=$1
     local command=$2
     local task_name=$3
-    read -p "$prompt_message (y/n): " -n 1 -r
-    echo    # move to a new line
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        eval $command
-        echo "$task_name completed."
-    else
-        echo "Skipped $task_name."
-    fi
+    while true; do
+        read -p "$prompt_message (y/n): " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            eval $command
+            echo "$task_name completed."
+            break
+        elif [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo "Skipped $task_name."
+            break
+        else
+            echo "Invalid input. Please enter 'y' or 'n'."
+        fi
+    done
 }
 
 # Function to execute tasks based on provided indices and confirmation flag
@@ -66,7 +71,7 @@ create_config_files() {
     model_name: \"nomad\"
     model_weights_path: \"$current_path/nomad/deploy/model_weights/nomad.pth\"
     model_config_path: \"$current_path/nomad/train/config/model.yaml\"
-    topomap_images_dir: \"$current_path/nomad/preprocessing/topomap\"
+    target_dir: \"$current_path/nomad/preprocessing/target\"
     topomap_dir: \"$current_path/nomad/preprocessing/topomap/bag_name\"
     waypoint: 2
     goal_node: -10

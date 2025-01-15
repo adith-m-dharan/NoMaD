@@ -28,6 +28,7 @@ r="rm -rf src/nomad/"
 tasks=(
     "Delete rosbags|${r}preprocessing/rosbags"
     "Delete topomaps|${r}preprocessing/topomap"
+    "Delete targets|${r}preprocessing/target"
     "Delete training data|${r}preprocessing/training_data"
     "Delete data splits|${r}preprocessing/data_splits"
     "Delete wandb cache|${r}train/wandb"

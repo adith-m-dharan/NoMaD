@@ -84,18 +84,30 @@ explore() {
     tmux new-session -d -s exploration -n explorer bash -c "
         $(setup deploy_nomad record_bag 5)
         ros2 bag record $cam_topic $odom_topic -o $rosbag_dir
-        $(cleanup record_bag)
-    "
-    tmux split-window -v -t exploration:explorer -p 85 bash -c "
-        $(setup deploy_nomad exploration 5)
-        ros2 run nomad explore.py --ros-args --params-file $model_config
         $(cleanup exploration)
     "
-    tmux split-window -v -t exploration:explorer bash -c "
+    tmux split-window -v -t exploration:explorer -p 80 bash -c "
         $(setup deploy_nomad controller 0)
         ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
     "
+    tmux split-window -v -t exploration:explorer bash -c "
+        $(setup deploy_nomad exploration 5)
+        ros2 run nomad explore.py --ros-args --params-file $model_config
+    "
     tmux attach -t exploration
+}
+
+search() {
+    tmux new-session -d -s search -n searcher bash -c "
+        $(setup deploy_nomad controller 0)
+        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+    "
+    tmux split-window -v -t search:searcher bash -c "
+        $(setup deploy_nomad search 5)
+        ros2 run nomad search.py --ros-args --params-file $model_config --remap /img:=$cam_topic
+        $(cleanup search)
+    "
+    tmux attach -t search
 }
 
 # Main menu function
@@ -109,6 +121,7 @@ main_menu() {
         echo "3. Create topomap"
         echo "4. Navigate"
         echo "5. Explore"
+        echo "6. Search"
         echo "9. Back"
         echo "0. Exit"
 
@@ -130,6 +143,9 @@ main_menu() {
                 ;;
             5)
                 explore
+                ;;
+            6)
+                search
                 ;;
             9)
                 ./src/exe.sh

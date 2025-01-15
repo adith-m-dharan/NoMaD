@@ -7,7 +7,7 @@ run_name: nomad
 num_diffusion_iters: 10
 
 # action output params
-len_traj_pred: 8
+len_traj_pred: 20
 learn_angle: False
 
 # context

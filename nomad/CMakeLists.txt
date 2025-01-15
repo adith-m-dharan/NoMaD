@@ -19,6 +19,7 @@ install(PROGRAMS
     deploy/scripts/utils.py
     deploy/scripts/controller.py
     deploy/scripts/explore.py
+    deploy/scripts/search.py
     DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
