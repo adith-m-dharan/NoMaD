@@ -44,7 +44,7 @@ class Search(Node):
         self.graph_hz = self.declare_parameter("graph_hz", 0.333).value
 
         self.n_value = self.declare_parameter("n_value", 0).value
-        self.target_confidence = self.declare_parameter("t_conf", 2).value
+        self.target_confidence = self.declare_parameter("t_conf", 3).value
 
         self.load_params()
         self.load_target()
@@ -54,6 +54,8 @@ class Search(Node):
         self.subgoal = []
 
     def load_target(self):
+        if not os.path.exists(self.target_dir):
+            os.makedirs(self.target_dir)
         assert self.target_dir != "", "Path to target dir cannot be empty"
         topomap_filenames = sorted(
             os.listdir(self.target_dir),
@@ -146,9 +148,8 @@ class Search(Node):
     def search_loop(self):
         rate = Rate(hz=self.hz)
         consecutive_true_count = 0
-        # stop = False
 
-        while rclpy.ok(): #and not stop:
+        while rclpy.ok():
             chosen_waypoint = np.zeros(4)
             if len(self.context_queue) > self.model_params["context_size"]:
                 imgs = transform_images(
@@ -185,7 +186,7 @@ class Search(Node):
                 dists = to_numpy(dists.flatten())
                 min_idx = np.argmin(dists)
 
-                print(f'distance = {dists[min_idx]}')
+                self.get_logger().info(f'distance = {dists[min_idx]}')
 
                 condition_true = dists[min_idx] < self.close_threshold
                 if condition_true:

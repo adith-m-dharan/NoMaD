@@ -157,6 +157,7 @@ class Navigate(Node):
 
     def navigation_loop(self):
         rate = Rate(hz=self.hz)
+        self.sg_idx = 0
         while rclpy.ok():
             chosen_waypoint = np.zeros(4)
             if len(self.context_queue) > self.model_params["context_size"]:
@@ -199,7 +200,7 @@ class Navigate(Node):
                 dists = to_numpy(dists.flatten())
                 min_idx = np.argmin(dists)
                 self.closest_node = min_idx*self.skip + start
-                self.get_logger().info(f"    Goal node : {self.goal_node}    |   Closest node : {self.closest_node}")
+                self.get_logger().info(f"Goal node : {self.goal_node}|Closest node : {self.closest_node}|distance : {dists[min_idx]}")
                 sg_idx = min(min_idx + int(dists[min_idx] <
                                         self.close_threshold), len(obsgoal_cond) - 1)
                 obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)

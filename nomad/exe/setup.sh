@@ -84,7 +84,8 @@ create_config_files() {
     w_max: 0.5
     hz: 4.0
     graph_hz: 0.33
-    n_value: 0"
+    n_value: 0
+    t_conf: 3"
     mkdir -p "$(dirname "$navigate_output_path")"
     echo "$navigate_content" > "$navigate_output_path"
     
