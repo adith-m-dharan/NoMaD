@@ -47,7 +47,8 @@ main_menu() {
         echo "K. Length of future predictions (current: $(show "$MODEL_YAML" "len_traj_pred"))"
         echo "L. Number of samples (current: $(show "$NAVIGATE_YAML" "num_samples"))"
         echo "M. Naction value (current: $(show "$NAVIGATE_YAML" "n_value"))"
-        echo "N. Target confidence (current: $(show "$NAVIGATE_YAML" "t_conf"))"
+        echo "N. Minimum distance between compared images (current: $(show "$NAVIGATE_YAML" "close_threshold"))"
+        echo "O. Target confidence (current: $(show "$NAVIGATE_YAML" "t_conf"))"
         echo "Z. Back"
         echo "X. Exit"
         read -p "Enter your choice: " choice
@@ -67,7 +68,8 @@ main_menu() {
 	    K) tune "len_traj_pred" "$MODEL_YAML" ;;
 	    L) tune "num_samples" "$NAVIGATE_YAML" ;;
 	    M) tune "n_value" "$NAVIGATE_YAML" ;;
-	    N) tune "t_conf" "$NAVIGATE_YAML" ;;
+	    N) tune "close_threshold" "$NAVIGATE_YAML" ;;
+	    O) tune "t_conf" "$NAVIGATE_YAML" ;;
 
             Z)
                 ./src/exe.sh
