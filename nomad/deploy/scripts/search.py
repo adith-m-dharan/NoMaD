@@ -2,6 +2,8 @@
 
 import os
 import time
+import argparse
+import sys
 from threading import Thread
 import rclpy
 from rclpy.node import Node
@@ -14,14 +16,17 @@ from PIL import Image as PILImage
 import yaml
 from std_msgs.msg import Bool, Float32MultiArray
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import Twist
 from utils import Rate
 from utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 
 
 class Search(Node):
-    def __init__(self):
+    def __init__(self, rotate=False):
         super().__init__('nomad')
+        self.rotate = rotate
+        
         self.model_name = self.declare_parameter(
             "model_name", "nomad").value
         self.model_weights_path = self.declare_parameter(
@@ -119,6 +124,12 @@ class Search(Node):
             10
         )
 
+        self.vel_pub = self.create_publisher(
+            Twist,
+            "/vel",
+            10
+        )
+
         self.sampled_actions_pub = self.create_publisher(
             Float32MultiArray,
             "/sampled_actions",
@@ -188,16 +199,24 @@ class Search(Node):
 
                 self.get_logger().info(f'distance = {dists[min_idx]}')
 
-                condition_true = dists[min_idx] < self.close_threshold
+                condition_true = dists[min_idx] < self.close_threshold * 2
                 if condition_true:
                     consecutive_true_count += 1
-                    print(consecutive_true_count)
+                    print(f'count: {consecutive_true_count}')
                 else:
                     consecutive_true_count = 0
                 if consecutive_true_count >= self.target_confidence:
+                    print(f'confidence: {self.target_confidence}')
                     self.reached = True
                 sg_idx = min(min_idx + int(condition_true), len(obsgoal_cond) - 1)
                 obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)
+
+                if self.rotate:
+                    vel_msg = Twist()
+                    vel_msg.linear.x = 0.0
+                    vel_msg.angular.z = self.w_max / 2
+                    self.vel_pub.publish(vel_msg)
+                    rate.sleep()
 
                 with torch.no_grad():
                     if len(obs_cond.shape) == 2:
@@ -262,8 +281,14 @@ class Search(Node):
             rate.sleep()
 
 def main(args=None):
+
+    parser = argparse.ArgumentParser(description="ROS 2 Navigation Node with Optional Rotation Mode")
+    parser.add_argument('--rotate', action='store_true', help="Enable rotation mode (publishes /vel)")
+
+    known_args, _ = parser.parse_known_args()
+
     rclpy.init(args=args)
-    search_node = Search()
+    search_node = Search(rotate=known_args.rotate)
 
     executor = MultiThreadedExecutor()
     executor.add_node(search_node)

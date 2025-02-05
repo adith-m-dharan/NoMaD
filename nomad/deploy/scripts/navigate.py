@@ -199,10 +199,10 @@ class Navigate(Node):
 
                 dists = to_numpy(dists.flatten())
                 min_idx = np.argmin(dists)
-                self.closest_node = min_idx*self.skip + start
-                self.get_logger().info(f"Goal node : {self.goal_node}|Closest node : {self.closest_node}|distance : {dists[min_idx]}")
+                self.closest_node = min_idx*self.skip + start # self.closest_node = min_idx * self.skip + start if (dists[min_idx] < self.close_threshold * 2) else self.closest_node
                 sg_idx = min(min_idx + int(dists[min_idx] <
                                         self.close_threshold), len(obsgoal_cond) - 1)
+                self.get_logger().info(f"Goal node : {self.goal_node}|Closest node : {self.closest_node}|distance : {dists[min_idx]}")
                 obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)
 
                 with torch.no_grad():

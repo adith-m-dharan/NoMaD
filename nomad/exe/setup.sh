@@ -72,7 +72,7 @@ create_config_files() {
     model_weights_path: \"$current_path/nomad/deploy/model_weights/nomad.pth\"
     model_config_path: \"$current_path/nomad/train/config/model.yaml\"
     target_dir: \"$current_path/nomad/preprocessing/target\"
-    topomap_dir: \"$current_path/nomad/preprocessing/topomap/bag_name\"
+    topomap_dir: \"$current_path/nomad/preprocessing/topomap/backward/bag_name\"
     waypoint: 2
     goal_node: -10
     close_threshold: 3

@@ -9,8 +9,12 @@ model_config="src/nomad/deploy/config/nomad.yaml"
 controller_config="src/nomad/deploy/config/controller.yaml"
 rosbag_dir="src/nomad/preprocessing/rosbags/$bag_name"
 training_data_dir="src/nomad/preprocessing/training_data"
-topomap_dir="src/nomad/preprocessing/topomap"
-cam_topic="image_raw"
+pick_target_dir="src/nomad/preprocessing/topomap/backward/$bag_name"
+target_dir="src/nomad/preprocessing/target"
+forward_topomap_dir="src/nomad/preprocessing/topomap/forward"
+backward_topomap_dir="src/nomad/preprocessing/topomap/backward"
+forward_cam_topic="forward/image_raw"
+backward_cam_topic="backward/image_raw"
 odom_topic="/odom_topic"
 vel_topic="/cmd_vel"
 
@@ -25,7 +29,7 @@ setup() {
 # Function to cleanup session
 cleanup() {
     local session_name=$1
-    echo "echo '...$session_name stopping' && conda deactivate && sleep 3 && tmux kill-session -t $session_name"
+    echo "echo '...$session_name stopping' && conda deactivate && tmux kill-session -t $session_name"
 }
 
 # Function to create a tmux session
@@ -41,7 +45,7 @@ create_tmux_session() {
 collect_trajectory() {
     local commands="
         $(setup deploy_nomad record_bag 5)
-        ros2 bag record $cam_topic $odom_topic -o $rosbag_dir
+        ros2 bag record $forward_cam_topic $backward_cam_topic $odom_topic -o $rosbag_dir
         $(cleanup record_bag)
     "
     create_tmux_session "record_bag" "record" "$commands"
@@ -50,7 +54,7 @@ collect_trajectory() {
 create_training_data() {
     local commands="
         $(setup deploy_nomad data_collection 0)
-        python3 src/nomad/preprocessing/process_bag_diff.py -i $rosbag_dir -o $training_data_dir -n -1 -s 4.0 -c $cam_topic -d $odom_topic
+        python3 src/nomad/preprocessing/process_bag_diff.py -i $rosbag_dir -o $training_data_dir -n -1 -s 4.0 -c $forward_cam_topic -d $odom_topic
         python3 src/nomad/preprocessing/pickle_data.py -f $training_data_dir/${bag_name}_0/traj_data.pkl -g
         $(cleanup data_collection)
     "
@@ -60,7 +64,8 @@ create_training_data() {
 create_topomap() {
     local commands="
         $(setup deploy_nomad topomap_creation 0)
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $topomap_dir -d $bag_name -i $cam_topic -t 1.0 -w 1
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_topomap_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_topomap_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1
         $(cleanup topomap_creation)
     "
     create_tmux_session "topomap_creation" "topomap" "$commands"
@@ -110,6 +115,69 @@ search() {
     tmux attach -t search
 }
 
+boomerang() {
+    tmux new-session -d -s exploration -n explorer bash -c "
+        $(setup deploy_nomad record_bag 5)
+        ros2 bag record $backward_cam_topic $forward_cam_topic $odom_topic -o $rosbag_dir
+        $(cleanup exploration)
+        tmux wait-for -S exploration_done
+    "
+    tmux split-window -v -t exploration:explorer -p 80 bash -c "
+        $(setup deploy_nomad controller 0)
+        export ROS_DOMAIN_ID=12
+        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+    "
+    tmux split-window -v -t exploration:explorer bash -c "
+        $(setup deploy_nomad exploration 5)
+        export ROS_DOMAIN_ID=12
+        ros2 run nomad explore.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
+    "
+    tmux attach -t exploration
+    tmux wait-for exploration_done
+
+    tmux new-session -d -s topomap_creation -n topomap bash -c "
+        $(setup deploy_nomad topomap_creation 0)
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_topomap_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_topomap_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
+        $(cleanup topomap_creation)
+        tmux wait-for -S topomap_done
+    "
+    tmux attach -t topomap_creation
+    tmux wait-for topomap_done
+
+    tmux new-session -d -s search -n searcher bash -c "
+        $(setup deploy_nomad rotation 0)
+        export ROS_DOMAIN_ID=12
+        ros2 topic echo $vel_topic
+        tmux wait-for -S search_done
+    "
+    tmux split-window -v -t search:searcher bash -c "
+        $(setup deploy_nomad search 0)
+        mkdir -p $target_dir && cp $pick_target_dir/0.png $target_dir
+        export ROS_DOMAIN_ID=12
+        ros2 run nomad search.py --rotate --ros-args --params-file $model_config --remap /img:=$forward_cam_topic --remap /vel:=$vel_topic
+        $(cleanup search)
+    "
+    tmux attach -t search
+    tmux wait-for search_done
+
+    tmux new-session -d -s navigation -n navigator bash -c "
+        $(setup deploy_nomad controller 0)
+        export ROS_DOMAIN_ID=12
+        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+        tmux wait-for -S navigation_done
+    "
+    tmux split-window -v -t navigation:navigator bash -c "
+        $(setup deploy_nomad navigation 5)
+        sed -i 's|backward/[^\"]*|backward/$bag_name|' $model_config
+        export ROS_DOMAIN_ID=12
+        ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
+        $(cleanup navigation)
+    "
+    tmux attach -t navigation
+    tmux wait-for navigation_done
+}
+
 # Main menu function
 main_menu() {
     while true; do
@@ -122,6 +190,7 @@ main_menu() {
         echo "4. Navigate"
         echo "5. Explore"
         echo "6. Search"
+        echo "7. Boomerang"
         echo "9. Back"
         echo "0. Exit"
 
@@ -146,6 +215,9 @@ main_menu() {
                 ;;
             6)
                 search
+                ;;
+            7)
+                boomerang
                 ;;
             9)
                 ./src/exe.sh

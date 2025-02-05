@@ -79,7 +79,7 @@ class Explore(Node):
     def init_comms(self):
         self.image_sub = self.create_subscription(
             Image,
-            "/image_raw",
+            "/img",
             self.image_callback,
             10,
             callback_group=MutuallyExclusiveCallbackGroup()

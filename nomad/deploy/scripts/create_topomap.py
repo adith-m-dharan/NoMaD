@@ -26,6 +26,7 @@ class CreateTopomap(Node):
         self.image_topic = args.image_topic
         self.topomap_images_dir = args.topomap_images_dir
         self.workers = args.workers
+        self.reverse = args.reverse
 
         max_workers = multiprocessing.cpu_count()
 
@@ -70,8 +71,32 @@ class CreateTopomap(Node):
     def create_img_msgs_list(self):
         self.img_msgs = []
         start = self.get_clock().now()
-        filtered_connections = [conn for conn in self.reader.connections \
-                                if conn.topic == self.image_topic]
+
+        # Normalize input topic by ensuring it starts with '/'
+        input_topic = self.image_topic if self.image_topic.startswith("/") else f"/{self.image_topic}"
+
+        # Debug: Print specified image topic (normalized)
+        print(f"Specified image topic for processing: {input_topic}")
+
+        # Debug: List available connections
+        print("Checking available connections:")
+        for conn in self.reader.connections:
+            print(f"Topic: {conn.topic}, Message Type: {conn.msgtype}")
+
+        # Filter connections
+        filtered_connections = [conn for conn in self.reader.connections if conn.topic == input_topic]
+
+        # Ensure valid topic is found
+        if not filtered_connections:
+            self.get_logger().error(f"No connections found for topic {input_topic}. Exiting...")
+            rclpy.shutdown()
+            return
+
+        # Debug: Print filtered connections
+        print("Filtered connections for processing:")
+        for conn in filtered_connections:
+            print(f"Filtered Topic: {conn.topic}")
+
         idx = 0
         for conn, _, rawdata in self.reader.messages(connections=filtered_connections):
             msg = self.typestore.deserialize_cdr(rawdata, conn.msgtype)
@@ -79,20 +104,28 @@ class CreateTopomap(Node):
             idx += 1
 
         elapsed = self.get_clock().now() - start
-        elapsed = elapsed.nanoseconds/1e9
-        print(f"Elapsed time for {len(self.img_msgs)} : {elapsed} secs")
+        elapsed = elapsed.nanoseconds / 1e9
+        print(f"Elapsed time for processing {len(self.img_msgs)} images: {elapsed} secs")
 
     def worker_job(self, img_list):
+        total_images = len(self.img_msgs) - 1
         for idx, img_msg in tqdm(img_list, leave=True):
             if not rclpy.ok():
                 break
             img = msg_to_pil(img_msg)
-            img.save(os.path.join(
-                self.topomap_name_dir, f"{idx}.png"))
-            
+            if self.reverse:
+                filename = f"{total_images - idx}.png"
+            else:
+                filename = f"{idx}.png"
+            img.save(os.path.join(self.topomap_name_dir, filename))
+
         self.worker_threads[threading.current_thread().name]['done'] = True
             
     def spawn_workers(self):
+        if not self.img_msgs:
+            self.get_logger().error("No image messages found. Exiting without spawning workers.")
+            return
+
         self.get_logger().info(f"Spawning {self.workers} worker threads")
         self.worker_threads = {}
         msg_lists = split_list(self.img_msgs, self.workers)
@@ -159,7 +192,7 @@ def main(args=None):
     parser.add_argument(
         "--image_topic",
         "-i",
-        default="/image_raw",
+        default="/img",
         type=str,
         help="image topic to subscribe to",
     )
@@ -169,6 +202,11 @@ def main(args=None):
         default=1,
         type=int,
         help="parallel worker threads. max is cpu count"
+    )
+    parser.add_argument(
+        "--reverse",
+        action='store_true',
+        help="Reverse the naming of the image files (default: False)"
     )
     args = parser.parse_args()
 

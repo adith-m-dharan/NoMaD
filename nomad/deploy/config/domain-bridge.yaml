@@ -1,0 +1,6 @@
+from_domain: 0
+to_domain: 12
+topics:
+  forward/image_raw:
+    type: sensor_msgs/msg/Image
+
