@@ -17,9 +17,8 @@ from PIL import Image as PILImage
 import yaml
 from std_msgs.msg import Bool, Float32MultiArray
 from sensor_msgs.msg import Image
-from utils import Rate
-from utils import msg_to_pil, to_numpy, transform_images, load_model
-from vint_train.training.train_utils import get_action
+from model import Rate
+from utils import msg_to_pil, to_numpy, transform_images, load_model, get_action
 
 
 class Navigate(Node):

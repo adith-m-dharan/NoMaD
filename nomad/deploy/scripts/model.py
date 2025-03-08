@@ -1,10 +1,103 @@
+import os
+import argparse
+import time
+import pdb
+import math
+
+from rclpy.clock import Clock, Duration
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from typing import List, Dict, Optional, Tuple, Callable
 from efficientnet_pytorch import EfficientNet
-from vint_train.models.self_attention import PositionalEncoding
+
+
+class Rate:
+    def __init__(self, hz, clock: Clock = None):
+        self.__hz = hz
+        self.__clock = clock
+        self.__time = self.now()
+
+    def now(self):
+        if self.__clock is None:
+            return time.monotonic()
+        return self.__clock.now().nanoseconds * 1e-9
+
+    def sleep(self):
+        sleep_duration = max(
+            0,
+            (1/self.__hz) - (self.now() - self.__time)
+        )
+        if self.__clock is None:
+            time.sleep(sleep_duration)
+        else:
+            self.__clock.sleep_for(Duration(seconds=sleep_duration))
+        self.__time = self.now()
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_seq_len=6):
+        super().__init__()
+
+        # Compute the positional encoding once
+        pos_enc = torch.zeros(max_seq_len, d_model)
+        pos = torch.arange(0, max_seq_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pos_enc[:, 0::2] = torch.sin(pos * div_term)
+        pos_enc[:, 1::2] = torch.cos(pos * div_term)
+        pos_enc = pos_enc.unsqueeze(0)
+
+        # Register the positional encoding as a buffer to avoid it being
+        # considered a parameter when saving the model
+        self.register_buffer('pos_enc', pos_enc)
+
+    def forward(self, x):
+        # Add the positional encoding to the input
+        x = x + self.pos_enc[:, :x.size(1), :]
+        return x
+
+class MultiLayerDecoder(nn.Module):
+    def __init__(self, embed_dim=512, seq_len=6, output_layers=[256, 128, 64], nhead=8, num_layers=8, ff_dim_factor=4):
+        super(MultiLayerDecoder, self).__init__()
+        self.positional_encoding = PositionalEncoding(embed_dim, max_seq_len=seq_len)
+        self.sa_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dim_feedforward=ff_dim_factor*embed_dim, activation="gelu", batch_first=True, norm_first=False)
+        self.sa_decoder = nn.TransformerEncoder(self.sa_layer, num_layers=num_layers)
+        self.output_layers = nn.ModuleList([nn.Linear(seq_len*embed_dim, embed_dim)])
+        self.output_layers.append(nn.Linear(embed_dim, output_layers[0]))
+        for i in range(len(output_layers)-1):
+            self.output_layers.append(nn.Linear(output_layers[i], output_layers[i+1]))
+
+    def forward(self, x):
+        if self.positional_encoding: x = self.positional_encoding(x)
+        x = self.sa_decoder(x)
+        # currently, x is [batch_size, seq_len, embed_dim]
+        x = x.reshape(x.shape[0], -1)
+        for i in range(len(self.output_layers)):
+            x = self.output_layers[i](x)
+            x = F.relu(x)
+        return x
+
+
+class DenseNetwork(nn.Module):
+    def __init__(self, embedding_dim):
+        super(DenseNetwork, self).__init__()
+        
+        self.embedding_dim = embedding_dim 
+        self.network = nn.Sequential(
+            nn.Linear(self.embedding_dim, self.embedding_dim//4),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim//4, self.embedding_dim//16),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim//16, 1)
+        )
+    
+    def forward(self, x):
+        x = x.reshape((-1, self.embedding_dim))
+        output = self.network(x)
+        return output
+    
 
 class NoMaD_ViNT(nn.Module):
     def __init__(
@@ -57,7 +150,7 @@ class NoMaD_ViNT(nn.Module):
             dim_feedforward=mha_ff_dim_factor*self.obs_encoding_size, 
             activation="gelu", 
             batch_first=True, 
-            norm_first=True
+            norm_first=False
         )
         self.sa_encoder = nn.TransformerEncoder(self.sa_layer, num_layers=mha_num_attention_layers)
 
@@ -130,6 +223,29 @@ class NoMaD_ViNT(nn.Module):
         return obs_encoding_tokens
 
 
+class NoMaD(nn.Module):
+
+    def __init__(self, vision_encoder, 
+                       noise_pred_net,
+                       dist_pred_net):
+        super(NoMaD, self).__init__()
+
+
+        self.vision_encoder = vision_encoder
+        self.noise_pred_net = noise_pred_net
+        self.dist_pred_net = dist_pred_net
+    
+    def forward(self, func_name, **kwargs):
+        if func_name == "vision_encoder" :
+            output = self.vision_encoder(kwargs["obs_img"], kwargs["goal_img"], input_goal_mask=kwargs["input_goal_mask"])
+        elif func_name == "noise_pred_net":
+            output = self.noise_pred_net(sample=kwargs["sample"], timestep=kwargs["timestep"], global_cond=kwargs["global_cond"])
+        elif func_name == "dist_pred_net":
+            output = self.dist_pred_net(kwargs["obsgoal_cond"])
+        else:
+            raise NotImplementedError
+        return output
+
 
 # Utils for Group Norm
 def replace_bn_with_gn(
@@ -146,7 +262,6 @@ def replace_bn_with_gn(
             num_channels=x.num_features)
     )
     return root_module
-
 
 def replace_submodules(
         root_module: nn.Module,
@@ -184,7 +299,3 @@ def replace_submodules(
         if predicate(m)]
     assert len(bn_list) == 0
     return root_module
-
-
-
-    

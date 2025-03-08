@@ -4,6 +4,7 @@ import sys
 import time
 import io
 import matplotlib.pyplot as plt
+import yaml
 
 # ROS
 from rclpy.clock import Clock, Duration
@@ -17,13 +18,123 @@ import torchvision.transforms.functional as TF
 
 import numpy as np
 from PIL import Image as PILImage
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Callable
 
 # models
-from vint_train.models.nomad import NoMaD, DenseNetwork
-from vint_train.models.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
-from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
-from vint_train.data.data_utils import IMAGE_ASPECT_RATIO
+from model import NoMaD, DenseNetwork, NoMaD_ViNT, replace_bn_with_gn
+from conditional_diffusion import ConditionalUnet1D
+
+IMAGE_ASPECT_RATIO = (
+    4 / 3
+)  # all images are centered cropped to a 4:3 aspect ratio in training
+
+# LOAD DATA CONFIG
+with open(os.path.join(os.path.dirname(__file__), "../config/diffusion.yaml"), "r") as f:
+    data_config = yaml.safe_load(f)
+
+# POPULATE ACTION STATS
+ACTION_STATS = {}
+for key in data_config['action_stats']:
+    ACTION_STATS[key] = np.array(data_config['action_stats'][key])
+
+
+def unnormalize_data(ndata, stats):
+    ndata = (ndata + 1) / 2
+    data = ndata * (stats['max'] - stats['min']) + stats['min']
+    return data   
+
+def from_numpy(array: np.ndarray) -> torch.Tensor:
+    return torch.from_numpy(array).float()
+
+def to_numpy(tensor):
+    return tensor.cpu().detach().numpy()
+
+# clip angle between -pi and pi
+def clip_angle(angle):
+    return np.mod(angle + np.pi, 2 * np.pi) - np.pi
+
+def split_list(input_list, split_factor):
+        n = len(input_list)
+        if split_factor <= 0 or split_factor > n:
+            raise ValueError("Number of sublists must \
+                             be between 1 and the length of the input list.")
+        
+        # Calculate the size of each chunk
+        chunk_size = n // split_factor
+        remainder = n % split_factor
+        
+        result = []
+        start = 0
+        
+        for i in range(split_factor):
+            end = start + chunk_size + (1 if i < remainder else 0)
+            result.append(input_list[start:end])
+            start = end
+        
+        return tuple(result)
+
+
+def is_valid_ros2_bag(path):
+    if not os.path.isdir(path):
+        return False
+
+    files = os.listdir(path)
+    if len(files) != 2 or "metadata.yaml" not in files:
+        return False
+
+    return any(file.endswith(".db3") for file in files)
+
+def msg_to_pil(msg: Image) -> PILImage.Image:
+    img = np.frombuffer(msg.data, dtype=np.uint8).reshape(
+        msg.height, msg.width, -1)
+    pil_image = PILImage.fromarray(img)
+    return pil_image
+
+def pil_to_msg(pil_img: PILImage.Image, encoding="mono8") -> Image:
+    img = np.asarray(pil_img)  
+    ros_image = Image(encoding=encoding)
+    ros_image.height, ros_image.width, _ = img.shape
+    ros_image.data = img.ravel().tobytes() 
+    ros_image.step = ros_image.width
+    return ros_image
+
+
+def transform_images(pil_imgs: List[PILImage.Image], image_size: List[int], center_crop: bool = False) -> torch.Tensor:
+    """Transforms a list of PIL image to a torch tensor."""
+    transform_type = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+                                    0.229, 0.224, 0.225]),
+        ]
+    )
+    if type(pil_imgs) != list:
+        pil_imgs = [pil_imgs]
+    transf_imgs = []
+    for pil_img in pil_imgs:
+        w, h = pil_img.size
+        if center_crop:
+            if w > h:
+                pil_img = TF.center_crop(pil_img, (h, int(h * IMAGE_ASPECT_RATIO)))  # crop to the right ratio
+            else:
+                pil_img = TF.center_crop(pil_img, (int(w / IMAGE_ASPECT_RATIO), w))
+        pil_img = pil_img.resize(image_size) 
+        transf_img = transform_type(pil_img)
+        transf_img = torch.unsqueeze(transf_img, 0)
+        transf_imgs.append(transf_img)
+    return torch.cat(transf_imgs, dim=1)
+
+
+def get_action(diffusion_output, action_stats=ACTION_STATS):
+    # diffusion_output: (B, 2*T+1, 1)
+    # return: (B, T-1)
+    device = diffusion_output.device
+    ndeltas = diffusion_output
+    ndeltas = ndeltas.reshape(ndeltas.shape[0], -1, 2)
+    ndeltas = to_numpy(ndeltas)
+    ndeltas = unnormalize_data(ndeltas, action_stats)
+    actions = np.cumsum(ndeltas, axis=1)
+    return from_numpy(actions).to(device)
 
 
 def load_model(
@@ -61,107 +172,3 @@ def load_model(
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
     return model
-
-
-def msg_to_pil(msg: Image) -> PILImage.Image:
-    img = np.frombuffer(msg.data, dtype=np.uint8).reshape(
-        msg.height, msg.width, -1)
-    pil_image = PILImage.fromarray(img)
-    return pil_image
-
-
-def pil_to_msg(pil_img: PILImage.Image, encoding="mono8") -> Image:
-    img = np.asarray(pil_img)  
-    ros_image = Image(encoding=encoding)
-    ros_image.height, ros_image.width, _ = img.shape
-    ros_image.data = img.ravel().tobytes() 
-    ros_image.step = ros_image.width
-    return ros_image
-
-
-def to_numpy(tensor):
-    return tensor.cpu().detach().numpy()
-
-
-def transform_images(pil_imgs: List[PILImage.Image], image_size: List[int], center_crop: bool = False) -> torch.Tensor:
-    """Transforms a list of PIL image to a torch tensor."""
-    transform_type = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                                    0.229, 0.224, 0.225]),
-        ]
-    )
-    if type(pil_imgs) != list:
-        pil_imgs = [pil_imgs]
-    transf_imgs = []
-    for pil_img in pil_imgs:
-        w, h = pil_img.size
-        if center_crop:
-            if w > h:
-                pil_img = TF.center_crop(pil_img, (h, int(h * IMAGE_ASPECT_RATIO)))  # crop to the right ratio
-            else:
-                pil_img = TF.center_crop(pil_img, (int(w / IMAGE_ASPECT_RATIO), w))
-        pil_img = pil_img.resize(image_size) 
-        transf_img = transform_type(pil_img)
-        transf_img = torch.unsqueeze(transf_img, 0)
-        transf_imgs.append(transf_img)
-    return torch.cat(transf_imgs, dim=1)
-    
-
-# clip angle between -pi and pi
-def clip_angle(angle):
-    return np.mod(angle + np.pi, 2 * np.pi) - np.pi
-
-
-def is_valid_ros2_bag(path):
-    if not os.path.isdir(path):
-        return False
-
-    files = os.listdir(path)
-    if len(files) != 2 or "metadata.yaml" not in files:
-        return False
-
-    return any(file.endswith(".db3") for file in files)
-
-def split_list(input_list, split_factor):
-        n = len(input_list)
-        if split_factor <= 0 or split_factor > n:
-            raise ValueError("Number of sublists must \
-                             be between 1 and the length of the input list.")
-        
-        # Calculate the size of each chunk
-        chunk_size = n // split_factor
-        remainder = n % split_factor
-        
-        result = []
-        start = 0
-        
-        for i in range(split_factor):
-            end = start + chunk_size + (1 if i < remainder else 0)
-            result.append(input_list[start:end])
-            start = end
-        
-        return tuple(result)
-
-class Rate:
-    def __init__(self, hz, clock: Clock = None):
-        self.__hz = hz
-        self.__clock = clock
-        self.__time = self.now()
-
-    def now(self):
-        if self.__clock is None:
-            return time.monotonic()
-        return self.__clock.now().nanoseconds * 1e-9
-
-    def sleep(self):
-        sleep_duration = max(
-            0,
-            (1/self.__hz) - (self.now() - self.__time)
-        )
-        if self.__clock is None:
-            time.sleep(sleep_duration)
-        else:
-            self.__clock.sleep_for(Duration(seconds=sleep_duration))
-        self.__time = self.now()

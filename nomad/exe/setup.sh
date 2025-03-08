@@ -56,21 +56,12 @@ setup_paths() {
 
 # Create configuration files
 create_config_files() {
-    local output_path="$current_path/nomad/train/config/path.yaml"
-    local dataset_content="datasets:
-  training_data:
-    data_folder: $current_path/nomad/preprocessing/training_data/
-    train: $current_path/nomad/preprocessing/data_splits/training_data/train/
-    test: $current_path/nomad/preprocessing/data_splits/training_data/test/"
-    mkdir -p "$(dirname "$output_path")"
-    echo "$dataset_content" > "$output_path"
-
     local navigate_output_path="$current_path/nomad/deploy/config/nomad.yaml"
     local navigate_content="nomad:
   ros__parameters:
     model_name: \"nomad\"
     model_weights_path: \"$current_path/nomad/deploy/model_weights/nomad.pth\"
-    model_config_path: \"$current_path/nomad/train/config/model.yaml\"
+    model_config_path: \"$current_path/nomad/deploy/config/model.yaml\"
     target_dir: \"$current_path/nomad/preprocessing/target\"
     topomap_dir: \"$current_path/nomad/preprocessing/topomap/bag_name\"
     waypoint: 2
@@ -154,7 +145,7 @@ install_packages_in_envs() {
             if conda env list | grep -q "^$env\s"; then
                 tmux send-keys -t "$SESSION_NAME" "source /opt/miniconda3/etc/profile.d/conda.sh" C-m
                 tmux send-keys -t "$SESSION_NAME" "conda activate $env" C-m
-                tmux send-keys -t "$SESSION_NAME" "pip install -e $current_path/nomad/diffusion_policy && pip install -e $current_path/nomad/train" C-m
+                tmux send-keys -t "$SESSION_NAME" "pip install -e $current_path/nomad/deploy/scripts" C-m
                 tmux send-keys -t "$SESSION_NAME" "conda deactivate" C-m
             else
                 echo "Conda environment $env does not exist. Skipping package installation for $env."
