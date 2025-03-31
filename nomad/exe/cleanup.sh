@@ -27,8 +27,9 @@ remove_conda_env() {
 r="rm -rf src/nomad/"
 tasks=(
     "Delete rosbags|${r}preprocessing/rosbags"
-    "Delete topomaps|${r}preprocessing/topomap"
+    "Delete topomaps|${r}preprocessing/map"
     "Delete targets|${r}preprocessing/target"
+    "Delete targets|${r}preprocessing/topomap"
     "Delete training data|${r}preprocessing/training_data"
     "Delete deploy config|${r}deploy/config/nomad.yaml"
     "Delete model weights|${r}deploy/model_weights"
@@ -72,19 +73,19 @@ main_menu() {
 
         case $choice in
             1)
-                execute_tasks 0 3 false
+                execute_tasks 0 4 false
                 break
                 ;;
             2)
-                execute_tasks 0 8 true
+                execute_tasks 0 9 true
                 break
                 ;;
             3)
-                execute_tasks 0 8 false
+                execute_tasks 0 9 false
                 break
                 ;;
             4)
-                execute_tasks 0 9 false
+                execute_tasks 0 10 false
                 break
                 ;;
             5)

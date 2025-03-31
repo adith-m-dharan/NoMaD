@@ -9,24 +9,19 @@ from tqdm import tqdm
 import networkx as nx
 
 # Import NoMaD components
-from vint_train.models.nomad import NoMaD, DenseNetwork
-from vint_train.models.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
+from deploy.code.models.nomad import NoMaD, DenseNetwork
+from deploy.code.models.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
 
 # Suppress warnings
 import warnings
 warnings.filterwarnings("ignore", message="enable_nested_tensor is True, but self.use_nested_tensor is False", category=UserWarning)
 
-def load_config():
-    # Load configuration from YAML files and set up the weights folder.
-    with open("config/model.yaml", "r") as f:
+def load_config(config_path):
+    # Load configuration from YAML file provided as an argument.
+    with open(config_path, "r") as f:
         config = yaml.safe_load(f)
-    with open("config/path.yaml", "r") as f:
-        path_config = yaml.safe_load(f)
-    config.update(path_config)
-    project_folder = os.path.join("weights")
-    os.makedirs(project_folder, exist_ok=True)
-    config["project_folder"] = project_folder
     return config
+
 
 def build_model(config, device):
     # Build the vision encoder and replace BatchNorm with GroupNorm.
@@ -203,26 +198,36 @@ def copy_path_images(image_paths, jump_index, destination_folder):
 def main():
     import argparse
     parser = argparse.ArgumentParser(
-        description="Find shortest path from 0.png to N.png using NoMaD distance predictor, and copy path images to 'topomap'."
+        description="Find shortest path from 0.png to N.png using NoMaD distance predictor, and copy path images."
     )
     parser.add_argument("-d", "--directory", type=str, required=True, help="Path to the image directory")
-    parser.add_argument("-i", "--i_skip", type=int, default=50, help="Minimum index skip between image pairs")
-    parser.add_argument("-s", "--step", type=int, default=10, help="Step size for candidate images")
-    parser.add_argument("-t", "--threshold", type=float, default=10.0, help="Distance threshold for similarity")
+    parser.add_argument("-n", "--checkpoint", type=str, required=True, help="Path to the NoMaD model checkpoint (.pth file)")
+    parser.add_argument("-y", "--config", type=str, required=True, help="Path to the model YAML configuration file")
+    parser.add_argument("-o", "--destination", type=str, required=True, help="Destination folder to copy images")
+    parser.add_argument("-i", "--i_skip", type=int, default=5, help="Minimum index skip between image pairs")
+    parser.add_argument("-s", "--step", type=int, default=20, help="Step size for candidate images")
+    parser.add_argument("-t", "--threshold", type=float, default=2.0, help="Distance threshold for similarity")
+
     args = parser.parse_args()
 
-    config = load_config()
+    # Load config from user-provided YAML path
+    if os.path.exists(args.config):
+        config = load_config(args.config)
+        print(f"Loaded config from '{args.config}'")
+    else:
+        print(f"No config found at '{args.config}'. Exiting.")
+        exit(1)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(config, device)
 
-    # Load checkpoint for the NoMaD distance predictor.
-    best_model_path = os.path.join(config["project_folder"], "best_dist_nomad.pth")
-    if os.path.exists(best_model_path):
-        print("Loading NoMaD model checkpoint...")
-        state_dict = torch.load(best_model_path, map_location=device, weights_only=True)
+    # Load provided checkpoint path for the NoMaD distance predictor.
+    if os.path.exists(args.checkpoint):
+        print(f"Loading NoMaD model checkpoint from '{args.checkpoint}'...")
+        state_dict = torch.load(args.checkpoint, map_location=device)
         model.load_state_dict(state_dict, strict=False)
     else:
-        print(f"No checkpoint found at {best_model_path}. Exiting.")
+        print(f"No checkpoint found at '{args.checkpoint}'. Exiting.")
         exit(1)
     model.eval()
 
@@ -234,25 +239,20 @@ def main():
 
     candidate = compute_sequence(image_paths, args.i_skip, args.step)
 
-    jump = []
-    path, jump  = graph_shortest_path(candidate, image_paths, model, config, device, args.threshold)
+    path, jump = graph_shortest_path(candidate, image_paths, model, config, device, args.threshold)
     
-    print_path(path, jump)
-    print(f"Skipped: {jump}")
-
-    # Only proceed if a valid path was found
     if path is not None:
-        topomap_folder = os.path.join(os.getcwd(), "topomap")
-        
-        # Delete 'topomap' folder if it already exists
-        if os.path.exists(topomap_folder):
-            shutil.rmtree(topomap_folder)
-        
-        # Now copy the images to 'topomap'
-        copy_path_images(image_paths, jump, topomap_folder)
+        print_path(path, jump)
+        print(f"Skipped jumps: {jump}")
+
+        destination_folder = os.path.abspath(args.destination)
+
+        if os.path.exists(destination_folder):
+            shutil.rmtree(destination_folder)
+
+        copy_path_images(image_paths, jump, destination_folder)
     else:
         print("No valid path found, skipping image copying.")
 
 if __name__ == "__main__":
     main()
-

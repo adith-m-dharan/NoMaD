@@ -6,13 +6,16 @@ read bag_name
 
 # Define variables for directories and topic names
 model_config="src/nomad/deploy/config/nomad.yaml"
+opt_config="src/nomad/deploy/config/model.yaml"
 controller_config="src/nomad/deploy/config/controller.yaml"
+weight="src/nomad/deploy/model_weights/nomad.pth"
 rosbag_dir="src/nomad/preprocessing/rosbags/$bag_name"
 training_data_dir="src/nomad/preprocessing/training_data"
-pick_target_dir="src/nomad/preprocessing/topomap/backward/$bag_name"
+pick_target_dir="src/nomad/preprocessing/map/backward/$bag_name"
 target_dir="src/nomad/preprocessing/target"
-forward_topomap_dir="src/nomad/preprocessing/topomap/forward"
-backward_topomap_dir="src/nomad/preprocessing/topomap/backward"
+forward_dir="src/nomad/preprocessing/map/forward"
+backward_dir="src/nomad/preprocessing/map/backward"
+topomap="src/nomad/preprocessing/topomap/$bag_name"
 forward_cam_topic="forward/image_raw"
 backward_cam_topic="backward/image_raw"
 odom_topic="/odom_topic"
@@ -64,8 +67,8 @@ create_training_data() {
 create_topomap() {
     local commands="
         $(setup deploy_nomad topomap_creation 0)
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_topomap_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_topomap_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1
         $(cleanup topomap_creation)
     "
     create_tmux_session "topomap_creation" "topomap" "$commands"
@@ -137,8 +140,9 @@ boomerang() {
 
     tmux new-session -d -s topomap_creation -n topomap bash -c "
         $(setup deploy_nomad topomap_creation 0)
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_topomap_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_topomap_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
+        python3 src/nomad/deploy/code/deployment/optimize.py -d $pick_target_dir -n $weight -o $topomap -y $opt_config
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
         $(cleanup topomap_creation)
         tmux wait-for -S topomap_done
     "
@@ -169,7 +173,7 @@ boomerang() {
     "
     tmux split-window -v -t navigation:navigator bash -c "
         $(setup deploy_nomad navigation 3)
-        sed -i 's|backward/[^\"]*|backward/$bag_name|' $model_config
+        sed -i 's|topomap/[^\"]*|topomap/$bag_name|' $model_config
         export ROS_DOMAIN_ID=$ID
         ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
         $(cleanup navigation)
