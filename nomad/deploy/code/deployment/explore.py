@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import time
 from threading import Thread
 import rclpy
 from rclpy.node import Node
@@ -10,12 +9,11 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 import numpy as np
 import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from PIL import Image as PILImage
 import yaml
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Image
 from utils import msg_to_pil, to_numpy, transform_images, load_model
-from vint_train.training.train_utils import get_action
+from deploy.code.training.train_utils import get_action
 
 
 class Explore(Node):

@@ -30,18 +30,12 @@ tasks=(
     "Delete topomaps|${r}preprocessing/topomap"
     "Delete targets|${r}preprocessing/target"
     "Delete training data|${r}preprocessing/training_data"
-    "Delete data splits|${r}preprocessing/data_splits"
-    "Delete wandb cache|${r}train/wandb"
-    "Delete train logs|${r}train/logs"
-    "Delete train config|${r}train/config/path.yaml"
     "Delete deploy config|${r}deploy/config/nomad.yaml"
     "Delete model weights|${r}deploy/model_weights"
-    "Remove diffusion_policy|cd src/ && git submodule deinit -f --all > /dev/null 2>&1 && cd .."
     "Unbuild colcon|rm -rf build log install"
-    "Uninstall train|find src/nomad/train -type d -name '*egg-info*' -exec rm -r {} +"
+    "Uninstall package|find src/nomad -type d -name '*egg-info*' -exec rm -r {} +"
     "Delete pycache|find . -type d -name '__pycache__' -exec rm -r {} +"
     "Remove deploy env|remove_conda_env deploy_nomad"
-    "Remove train env|remove_conda_env train_nomad"
 )
 
 # Function to execute a range of tasks
@@ -67,10 +61,9 @@ main_menu() {
     	clear
         echo "Choose an option:"
         echo "1. Delete collected data"
-        echo "2. Clear training logs"
-        echo "3. Custom removal"
-        echo "4. Clean repository"
-        echo "5. Uninstall"
+        echo "2. Custom removal"
+        echo "3. Clean repository"
+        echo "4. Uninstall"
         echo "9. Back"
         echo "0. Exit"
 
@@ -79,26 +72,22 @@ main_menu() {
 
         case $choice in
             1)
-                execute_tasks 0 2 false
+                execute_tasks 0 3 false
                 break
                 ;;
             2)
-                execute_tasks 3 5 false
+                execute_tasks 0 8 true
                 break
                 ;;
             3)
-                execute_tasks 0 14 true
+                execute_tasks 0 8 false
                 break
                 ;;
             4)
-                execute_tasks 0 12 false
+                execute_tasks 0 9 false
                 break
                 ;;
             5)
-                execute_tasks 0 14 false
-                break
-                ;;
-            9)
                 ./src/exe.sh
                 break
                 ;;

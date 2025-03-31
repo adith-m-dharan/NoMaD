@@ -17,6 +17,8 @@ class Controller(Node):
     def __init__(self):
         super().__init__('controller')
 
+        self.continue_zero_publish = True
+
         self.v_max = self.declare_parameter("v_max", 0.2).value
         self.w_max = self.declare_parameter("w_max", 0.2).value
         self.hz = self.declare_parameter("frame_rate", 4).value
@@ -107,10 +109,17 @@ class Controller(Node):
             vel_msg.linear.x = v
             vel_msg.angular.z = w
             self.get_logger().info(f"Publishing new vel: {v}, {w}")
+
+        elif self.continue_zero_publish:
+            vel_msg.linear.x = 0.0
+            vel_msg.angular.z = 0.0
+            self.get_logger().warn("Waypoint timeout! Publishing zero vel: {vel_msg.linear.x}, {vel_msg.angular.z}")
+
         self.vel_pub.publish(vel_msg)
 
 class ROSData:
     def __init__(self, node: Node, timeout: int = 3, queue_size: int = 1, name: str = ""):
+
         self.node = node
         self.timeout = timeout
         self.last_time_received = float("-inf")
@@ -128,7 +137,7 @@ class ROSData:
         if self.queue_size == 1:
             self.data = data
         else:
-            if self.data is None or time_waited > self.timeout:  # reset queue if timeout
+            if self.data is None or time_waited > self.timeout:
                 self.data = []
             if len(self.data) == self.queue_size:
                 self.data.pop(0)
@@ -141,8 +150,10 @@ class ROSData:
         valid = time_waited < self.timeout
         if self.queue_size > 1:
             valid = valid and len(self.data) == self.queue_size
+
         if verbose and not valid:
             self.node.get_logger().warn(f"Not receiving {self.name} data for {time_waited} seconds (timeout: {self.timeout} seconds)")
+
         return valid
 
 

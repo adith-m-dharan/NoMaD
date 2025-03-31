@@ -7,11 +7,11 @@ from prettytable import PrettyTable
 import tqdm
 import itertools
 
-from vint_train.visualizing.action_utils import visualize_traj_pred, plot_trajs_and_points
-from vint_train.visualizing.distance_utils import visualize_dist_pred
-from vint_train.visualizing.visualize_utils import to_numpy, from_numpy
-from vint_train.training.logger import Logger
-from vint_train.data.data_utils import VISUALIZATION_IMAGE_SIZE
+from deploy.code.visualizing.action_utils import visualize_traj_pred, plot_trajs_and_points
+from deploy.code.visualizing.distance_utils import visualize_dist_pred
+from deploy.code.visualizing.visualize_utils import to_numpy, from_numpy
+from deploy.code.training.logger import Logger
+from deploy.code.data.data_utils import VISUALIZATION_IMAGE_SIZE
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.training_utils import EMAModel
 

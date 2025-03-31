@@ -2,29 +2,30 @@
 
 import os
 import time
+import argparse
 from threading import Thread
-
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-
 import numpy as np
 import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from PIL import Image as PILImage
-
 import yaml
 from std_msgs.msg import Bool, Float32MultiArray
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import Twist
 from utils import Rate
 from utils import msg_to_pil, to_numpy, transform_images, load_model
-from vint_train.training.train_utils import get_action
+from deploy.code.training.train_utils import get_action
 
 
-class Navigate(Node):
-    def __init__(self):
+class Search(Node):
+    def __init__(self, rotate=False):
         super().__init__('nomad')
+        self.rotate = rotate
+        
         self.model_name = self.declare_parameter(
             "model_name", "nomad").value
         self.model_weights_path = self.declare_parameter(
@@ -32,8 +33,8 @@ class Navigate(Node):
         self.model_config_path = self.declare_parameter(
             "model_config_path", "").value
 
-        self.topomap_dir = self.declare_parameter(
-            "topomap_dir", "").value
+        self.target_dir = self.declare_parameter(
+            "target_dir", "").value
 
         self.waypoint = self.declare_parameter("waypoint", 2).value
         self.goal_node = self.declare_parameter("goal_node", -1).value
@@ -46,17 +47,36 @@ class Navigate(Node):
         self.hz = self.declare_parameter("hz", 4.0).value
         self.graph_hz = self.declare_parameter("graph_hz", 0.333).value
 
-        self.skip = self.declare_parameter("skip", 1).value
-        self.tolerence = self.declare_parameter("tolerence", 0).value
-
         self.n_value = self.declare_parameter("n_value", 0).value
+        self.target_confidence = self.declare_parameter("t_conf", 3).value
 
         self.load_params()
-        self.load_topomap()
+        self.load_target()
         self.init_comms()
 
         self.context_queue = []
         self.subgoal = []
+
+    def load_target(self):
+        if not os.path.exists(self.target_dir):
+            os.makedirs(self.target_dir)
+        assert self.target_dir != "", "Path to target dir cannot be empty"
+        topomap_filenames = sorted(
+            os.listdir(self.target_dir),
+            key=lambda x: int(x.split(".")[0])
+        )
+        num_nodes = len(os.listdir(self.target_dir))
+
+        self.target = []
+        for i in range(num_nodes):
+            img_path = os.path.join(self.target_dir, topomap_filenames[i])
+            with PILImage.open(img_path) as img:
+                img.load()
+                self.target.append(img)
+
+        self.get_logger().info(f"Loaded {len(self.target)} imgs into target")
+
+        self.reached = False
 
     def load_params(self):
         assert os.path.isfile(self.model_config_path), \
@@ -88,32 +108,6 @@ class Navigate(Node):
                 prediction_type='epsilon'
             )
 
-    def load_topomap(self):
-        assert self.topomap_dir != "", "Path to topomap dir cannot be empty"
-        topomap_filenames = sorted(
-            os.listdir(self.topomap_dir),
-            key=lambda x: int(x.split(".")[0])
-        )
-        num_nodes = len(os.listdir(self.topomap_dir))
-
-        self.topomap = []
-        for i in range(num_nodes):
-            img_path = os.path.join(self.topomap_dir, topomap_filenames[i])
-            with PILImage.open(img_path) as img:
-                img.load()
-                self.topomap.append(img)
-
-        self.get_logger().info(f"Loaded {len(self.topomap)} imgs into topomap")
-
-        self.closest_node = 0
-        assert -len(self.topomap) <= self.goal_node < len(self.topomap), "Invalid goal index"
-        if self.goal_node < 0:
-            self.goal_node = len(self.topomap) + self.goal_node
-        else:
-            self.goal_node = self.goal_node
-
-        self.reached = False
-
     def init_comms(self):
         self.img_sub = self.create_subscription(
             Image,
@@ -126,6 +120,12 @@ class Navigate(Node):
         self.waypoint_pub = self.create_publisher(
             Float32MultiArray,
             "/waypoint",
+            10
+        )
+
+        self.vel_pub = self.create_publisher(
+            Twist,
+            "/vel",
             10
         )
 
@@ -155,9 +155,10 @@ class Navigate(Node):
         self.context_queue.pop(0)
         self.context_queue.append(img)
 
-    def navigation_loop(self):
+    def search_loop(self):
         rate = Rate(hz=self.hz)
-        self.sg_idx = 0
+        consecutive_true_count = 0
+
         while rclpy.ok():
             chosen_waypoint = np.zeros(4)
             if len(self.context_queue) > self.model_params["context_size"]:
@@ -172,18 +173,13 @@ class Navigate(Node):
 
                 mask = torch.zeros(1).long().to(self.device)
 
-                start = max(self.closest_node, 0)
-                end = min(self.closest_node + self.radius*self.skip + 1, self.goal_node)
+                target_image = [self.target[0]]
 
-                selected_images = [self.topomap[i] for i in range(start, end + 1, self.skip)]
-
-                goal_img = [transform_images(
-                    g_img,
+                goal_img = transform_images(
+                    target_image,
                     self.model_params["image_size"],
                     center_crop=False
-                ).to(self.device) for g_img in selected_images]
-                
-                goal_img = torch.concat(goal_img, dim=0)
+                ).to(self.device)
 
                 obsgoal_cond = self.model(
                     'vision_encoder',
@@ -199,11 +195,27 @@ class Navigate(Node):
 
                 dists = to_numpy(dists.flatten())
                 min_idx = np.argmin(dists)
-                self.closest_node = min_idx*self.skip + start # self.closest_node = min_idx * self.skip + start if (dists[min_idx] < self.close_threshold * 2) else self.closest_node
-                sg_idx = min(min_idx + int(dists[min_idx] <
-                                        self.close_threshold), len(obsgoal_cond) - 1)
-                self.get_logger().info(f"Goal node : {self.goal_node}|Closest node : {self.closest_node}|distance : {dists[min_idx]}")
+
+                self.get_logger().info(f'distance = {dists[min_idx]}')
+
+                condition_true = dists[min_idx] < self.close_threshold * 2
+                if condition_true:
+                    consecutive_true_count += 1
+                    print(f'count: {consecutive_true_count}')
+                else:
+                    consecutive_true_count = 0
+                if consecutive_true_count >= self.target_confidence:
+                    print(f'confidence: {self.target_confidence}')
+                    self.reached = True
+                sg_idx = min(min_idx + int(condition_true), len(obsgoal_cond) - 1)
                 obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)
+
+                if self.rotate:
+                    vel_msg = Twist()
+                    vel_msg.linear.x = 0.0
+                    vel_msg.angular.z = self.w_max / 2
+                    self.vel_pub.publish(vel_msg)
+                    rate.sleep()
 
                 with torch.no_grad():
                     if len(obs_cond.shape) == 2:
@@ -255,35 +267,40 @@ class Navigate(Node):
             if rclpy.ok():
                 self.waypoint_pub.publish(waypoint_msg)
 
-            self.reached = (self.goal_node - self.tolerence <= self.closest_node <= self.goal_node + self.tolerence)
             msg = Bool()
             msg.data = bool(self.reached)
             if rclpy.ok():
                 self.goal_reached_pub.publish(msg)
+
             if self.reached:
-                self.get_logger().info("Reached goal. Shutting down ...")
+                self.get_logger().info("Spotted goal. Shutting down ...")
                 time.sleep(5)
                 rclpy.shutdown()
 
             rate.sleep()
 
-
 def main(args=None):
+
+    parser = argparse.ArgumentParser(description="ROS 2 Navigation Node with Optional Rotation Mode")
+    parser.add_argument('--rotate', action='store_true', help="Enable rotation mode (publishes /vel)")
+
+    known_args, _ = parser.parse_known_args()
+
     rclpy.init(args=args)
-    navigator_node = Navigate()
+    search_node = Search(rotate=known_args.rotate)
 
     executor = MultiThreadedExecutor()
-    executor.add_node(navigator_node)
+    executor.add_node(search_node)
 
-    navigation_loop = Thread(target=navigator_node.navigation_loop)
-    navigation_loop.start()
+    search_loop = Thread(target=search_node.search_loop)
+    search_loop.start()
 
     try:
-        rclpy.spin(navigator_node, executor=executor)
+        rclpy.spin(search_node, executor=executor)
     except KeyboardInterrupt:
-        print("Killing nomad navigate ...")
-        navigation_loop.join()
-        navigator_node.destroy_node()
+        print("Killing nomad search ...")
+        search_loop.join()
+        search_node.destroy_node()
 
 
 if __name__ == "__main__":

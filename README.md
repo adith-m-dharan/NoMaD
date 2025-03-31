@@ -1,6 +1,6 @@
 ﻿## Overview
 
-This readme explains the scripts to manage the setup, execution, tuning, training, and cleanup processes for the project. Below, you will find detailed instructions on how to deploy the model.
+This readme explains the scripts to manage the setup, execution, tuning, and cleanup processes for the project. Below, you will find detailed instructions on how to deploy the model.
 
 - This is a ROS2 adaptation (NoMaD only and focused on Navigation) of the original work by [robodhruv](https://github.com/robodhruv/visualnav-transformer).
 - ROS humble and miniconda3 must be installed in `/opt/`.
@@ -15,7 +15,7 @@ This readme explains the scripts to manage the setup, execution, tuning, trainin
 
 ### Purpose
 
-The `exe.sh` script serves as the main entry point to run other scripts. It provides options to run the setup, execution, tuning the parameters, training the model, and cleaning up repo of this project. All related scripts are located in the `src/nomad/exe` folder.
+The `exe.sh` script serves as the main entry point to run other scripts. It provides options to run the setup, execution, tuning the parameters, and cleaning up repo of this project. All related scripts are located in the `src/nomad/exe` folder.
 
 ### Usage
 
@@ -35,7 +35,6 @@ The `exe.sh` script serves as the main entry point to run other scripts. It prov
   - Setup
   - Run
   - Tune
-  - Train
   - Cleanup
 
 ---
@@ -64,7 +63,7 @@ The `setup.sh` script sets up the environment and necessary configurations for t
   Updates the `diffusion_policy` [submodule](https://github.com/real-stanford/diffusion_policy).
 
 - **Create Conda Environment:**
-  Creates Conda environments (`deploy_nomad` and `train_nomad`) based on YAML configuration files.
+  Creates Conda environments `deploy_nomad` based on YAML configuration files.
 
 - **Install Packages in Environments:**
   Installs required packages in the created Conda environments.
@@ -202,46 +201,6 @@ The `run.sh` script is designed to collect new trajectories, create data from re
   - `--params-file`: Path to the parameter file.
   - `--remap /img:=/cam0/image_raw`: Remaps the image topic.
   - **Explanation:** This command runs the navigation script, which uses the controller and the generated topomap to navigate through the environment. The image topic is remapped to ensure the correct image data is used during navigation.
-
----
-
-## `Train`
-
-### Purpose
-
-The `train.sh` script is used to train the Nomad model. It allows for training from scratch or continuing training from a previous checkpoint.
-
-### Script Breakdown
-
-- **Training Mode Prompt:**
-  Prompts the user to choose whether to train from scratch or continue training from a previous checkpoint.
-
-- **Configuration Adjustments:**
-  Comments or uncomments the `load_run` line in the `model.yaml` configuration file based on the user's choice.
-
-- **Activate Conda Environment:**
-  Activates the `train_nomad` Conda environment.
-
-- **Run Data Split and Training:**
-  Executes the `data_split.py` and `train.py` scripts to split the data and train the model.
-
-### Commands
-
-- **Data Split:**
-  ```bash
-  python3 data_split.py
-  ```
-
-- **Training:**
-  ```bash
-  python3 train.py
-  ```
-
-### Parameters
-
-- **train_from_scratch:** Determines whether to train from scratch or continue from a previous checkpoint.
-- **model_weights_path:** Path to the model weights file.
-- **model_config_path:** Path to the model configuration file.
 
 ---
 

@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 
-from vint_train.data.data_utils import (
+from deploy.code.data.data_utils import (
     img_path_to_data,
     calculate_sin_cos,
     get_data_path,

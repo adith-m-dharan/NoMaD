@@ -4,9 +4,7 @@
 tasks=(
     "run_colcon_build:Do you want to build ROS package?:ROS package build"
     "download_nomad_pth:Do you want to download model weight?:Weight download"
-    "git submodule update --init --recursive:Do you want to update submodule?:Submodule update"
     "create_conda_environment deploy_nomad nomad/deploy/deploy_nomad.yaml:Do you want to create deployment environment?:Create deploy env"
-    "create_conda_environment train_nomad nomad/train/train_nomad.yaml:Do you want to create training environment?:Create train env"
     "install_packages_in_envs:Do you want to install packages in environments?:Package install"
 )
 
@@ -56,21 +54,12 @@ setup_paths() {
 
 # Create configuration files
 create_config_files() {
-    local output_path="$current_path/nomad/train/config/path.yaml"
-    local dataset_content="datasets:
-  training_data:
-    data_folder: $current_path/nomad/preprocessing/training_data/
-    train: $current_path/nomad/preprocessing/data_splits/training_data/train/
-    test: $current_path/nomad/preprocessing/data_splits/training_data/test/"
-    mkdir -p "$(dirname "$output_path")"
-    echo "$dataset_content" > "$output_path"
-
     local navigate_output_path="$current_path/nomad/deploy/config/nomad.yaml"
     local navigate_content="nomad:
   ros__parameters:
     model_name: \"nomad\"
     model_weights_path: \"$current_path/nomad/deploy/model_weights/nomad.pth\"
-    model_config_path: \"$current_path/nomad/train/config/model.yaml\"
+    model_config_path: \"$current_path/nomad/deploy/config/model.yaml\"
     target_dir: \"$current_path/nomad/preprocessing/target\"
     topomap_dir: \"$current_path/nomad/preprocessing/topomap/backward/bag_name\"
     waypoint: 2
@@ -143,24 +132,20 @@ create_conda_environment() {
 # Install packages in specified environments
 install_packages_in_envs() {
     SESSION_NAME="install_pkg"
-    env_list=("train_nomad" "deploy_nomad")
+    local env="deploy_nomad"
 
     if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
         echo "tmux session $SESSION_NAME already exists"
     else
         tmux new-session -d -s "$SESSION_NAME"
-
-        for env in "${env_list[@]}"; do
-            if conda env list | grep -q "^$env\s"; then
-                tmux send-keys -t "$SESSION_NAME" "source /opt/miniconda3/etc/profile.d/conda.sh" C-m
-                tmux send-keys -t "$SESSION_NAME" "conda activate $env" C-m
-                tmux send-keys -t "$SESSION_NAME" "pip install -e $current_path/nomad/diffusion_policy && pip install -e $current_path/nomad/train" C-m
-                tmux send-keys -t "$SESSION_NAME" "conda deactivate" C-m
-            else
-                echo "Conda environment $env does not exist. Skipping package installation for $env."
-            fi
-        done
-
+        if conda env list | grep -q "^$env\s"; then
+            tmux send-keys -t "$SESSION_NAME" "source /opt/miniconda3/etc/profile.d/conda.sh" C-m
+            tmux send-keys -t "$SESSION_NAME" "conda activate $env" C-m
+            tmux send-keys -t "$SESSION_NAME" "pip install -e $current_path/nomad" C-m
+            tmux send-keys -t "$SESSION_NAME" "conda deactivate" C-m
+        else
+            echo "Conda environment $env does not exist. Skipping package installation for $env."
+        fi
         tmux send-keys -t "$SESSION_NAME" "sleep 3; tmux kill-session -t $SESSION_NAME" C-m
         tmux attach -t "$SESSION_NAME"
     fi
@@ -180,34 +165,27 @@ main_menu() {
         echo "Choose an option:"
         echo "1. Full installation"
         echo "2. Installation for deployment"
-        echo "3. Installation for training"
-        echo "4. Installation without conda"
-        echo "5. Custom installation"
+        echo "3. Installation without conda"
+        echo "4. Custom installation"
         echo "9. Back"
         echo "0. Exit"
-
         read -p "Enter your choice: " choice
-        echo    # move to a new line
-
+        echo
         case $choice in
             1)
-                installation 0 1 2 3 4 5 false
+                installation 0 1 2 3 false
                 break
                 ;;
             2)
-                installation 0 1 2 3 5 false
+                installation 0 1 2 false
                 break
                 ;;
             3)
-                installation 0 1 2 4 5 false
+                installation 0 1 3 false
                 break
                 ;;
             4)
-                installation 0 1 2 5 false
-                break
-                ;;
-            5)
-                installation 0 1 2 3 4 5 true
+                installation 0 1 2 3 true
                 break
                 ;;
             9)

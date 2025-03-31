@@ -1,9 +1,5 @@
-
 import os
-import sys
 import time
-import io
-import matplotlib.pyplot as plt
 
 # ROS
 from rclpy.clock import Clock, Duration
@@ -16,14 +12,14 @@ from torchvision import transforms
 import torchvision.transforms.functional as TF
 
 import numpy as np
+from typing import List
 from PIL import Image as PILImage
-from typing import List, Tuple, Dict, Optional
 
 # models
-from vint_train.models.nomad import NoMaD, DenseNetwork
-from vint_train.models.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
-from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
-from vint_train.data.data_utils import IMAGE_ASPECT_RATIO
+from deploy.code.models.nomad import NoMaD, DenseNetwork
+from deploy.code.models.nomad_vint import NoMaD_ViNT, replace_bn_with_gn
+from deploy.code.diffusion.conditional_unet1d import ConditionalUnet1D
+from deploy.code.data.data_utils import IMAGE_ASPECT_RATIO
 
 
 def load_model(

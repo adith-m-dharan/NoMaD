@@ -6,8 +6,7 @@ while true; do
     echo "1. Setup"
     echo "2. Run"
     echo "3. Tune"
-    echo "4. Train"
-    echo "5. Cleanup"
+    echo "4. Cleanup"
     echo "0. Exit"
     read -p "Enter your choice: " choice
 
@@ -25,10 +24,6 @@ while true; do
             break
             ;;
         4)
-            ./src/nomad/exe/train.sh
-            break
-            ;;
-        5)
             ./src/nomad/exe/cleanup.sh
             break
             ;;

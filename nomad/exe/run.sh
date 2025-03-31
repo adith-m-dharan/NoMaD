@@ -79,7 +79,7 @@ navigate() {
     tmux split-window -v -t navigation:navigator bash -c "
         $(setup deploy_nomad navigation 5)
         sed -i 's|topomap/[^\"]*|topomap/$bag_name|' $model_config
-        ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$cam_topic
+        ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
         $(cleanup navigation)
     "
     tmux attach -t navigation
@@ -88,7 +88,7 @@ navigate() {
 explore() {
     tmux new-session -d -s exploration -n explorer bash -c "
         $(setup deploy_nomad record_bag 5)
-        ros2 bag record $cam_topic $odom_topic -o $rosbag_dir
+        ros2 bag record $forward_cam_topic $odom_topic -o $rosbag_dir
         $(cleanup exploration)
     "
     tmux split-window -v -t exploration:explorer -p 80 bash -c "
@@ -97,7 +97,7 @@ explore() {
     "
     tmux split-window -v -t exploration:explorer bash -c "
         $(setup deploy_nomad exploration 5)
-        ros2 run nomad explore.py --ros-args --params-file $model_config
+        ros2 run nomad explore.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
     "
     tmux attach -t exploration
 }
@@ -109,27 +109,27 @@ search() {
     "
     tmux split-window -v -t search:searcher bash -c "
         $(setup deploy_nomad search 5)
-        ros2 run nomad search.py --ros-args --params-file $model_config --remap /img:=$cam_topic
+        ros2 run nomad search.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
         $(cleanup search)
     "
     tmux attach -t search
 }
-
+ID=0
 boomerang() {
     tmux new-session -d -s exploration -n explorer bash -c "
-        $(setup deploy_nomad record_bag 5)
+        $(setup deploy_nomad record_bag 3)
         ros2 bag record $backward_cam_topic $forward_cam_topic $odom_topic -o $rosbag_dir
         $(cleanup exploration)
         tmux wait-for -S exploration_done
     "
     tmux split-window -v -t exploration:explorer -p 80 bash -c "
         $(setup deploy_nomad controller 0)
-        export ROS_DOMAIN_ID=12
+        export ROS_DOMAIN_ID=$ID
         ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
     "
     tmux split-window -v -t exploration:explorer bash -c "
-        $(setup deploy_nomad exploration 5)
-        export ROS_DOMAIN_ID=12
+        $(setup deploy_nomad exploration 3)
+        export ROS_DOMAIN_ID=$ID
         ros2 run nomad explore.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
     "
     tmux attach -t exploration
@@ -147,14 +147,14 @@ boomerang() {
 
     tmux new-session -d -s search -n searcher bash -c "
         $(setup deploy_nomad rotation 0)
-        export ROS_DOMAIN_ID=12
+        export ROS_DOMAIN_ID=$ID
         ros2 topic echo $vel_topic
         tmux wait-for -S search_done
     "
     tmux split-window -v -t search:searcher bash -c "
         $(setup deploy_nomad search 0)
         mkdir -p $target_dir && cp $pick_target_dir/0.png $target_dir
-        export ROS_DOMAIN_ID=12
+        export ROS_DOMAIN_ID=$ID
         ros2 run nomad search.py --rotate --ros-args --params-file $model_config --remap /img:=$forward_cam_topic --remap /vel:=$vel_topic
         $(cleanup search)
     "
@@ -163,14 +163,14 @@ boomerang() {
 
     tmux new-session -d -s navigation -n navigator bash -c "
         $(setup deploy_nomad controller 0)
-        export ROS_DOMAIN_ID=12
+        export ROS_DOMAIN_ID=$ID
         ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
         tmux wait-for -S navigation_done
     "
     tmux split-window -v -t navigation:navigator bash -c "
-        $(setup deploy_nomad navigation 5)
+        $(setup deploy_nomad navigation 3)
         sed -i 's|backward/[^\"]*|backward/$bag_name|' $model_config
-        export ROS_DOMAIN_ID=12
+        export ROS_DOMAIN_ID=$ID
         ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
         $(cleanup navigation)
     "

@@ -13,13 +13,13 @@ include_directories(
 )
 
 install(PROGRAMS
-    deploy/scripts/__init__.py
-    deploy/scripts/navigate.py
-    deploy/scripts/create_topomap.py
-    deploy/scripts/utils.py
-    deploy/scripts/controller.py
-    deploy/scripts/explore.py
-    deploy/scripts/search.py
+    deploy/code/deployment/__init__.py
+    deploy/code/deployment/navigate.py
+    deploy/code/deployment/create_topomap.py
+    deploy/code/deployment/utils.py
+    deploy/code/deployment/controller.py
+    deploy/code/deployment/explore.py
+    deploy/code/deployment/search.py
     DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
