@@ -67,8 +67,9 @@ create_training_data() {
 create_topomap() {
     local commands="
         $(setup deploy_nomad topomap_creation 0)
+        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
+        python3 src/nomad/deploy/code/deployment/optimize.py -d $pick_target_dir -n $weight -o $topomap -y $opt_config
         ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1
         $(cleanup topomap_creation)
     "
     create_tmux_session "topomap_creation" "topomap" "$commands"
@@ -91,7 +92,7 @@ navigate() {
 explore() {
     tmux new-session -d -s exploration -n explorer bash -c "
         $(setup deploy_nomad record_bag 5)
-        ros2 bag record $forward_cam_topic $odom_topic -o $rosbag_dir
+        ros2 bag record $backward_cam_topic $forward_cam_topic $odom_topic -o $rosbag_dir
         $(cleanup exploration)
     "
     tmux split-window -v -t exploration:explorer -p 80 bash -c "
@@ -117,68 +118,28 @@ search() {
     "
     tmux attach -t search
 }
-ID=0
 boomerang() {
-    tmux new-session -d -s exploration -n explorer bash -c "
-        $(setup deploy_nomad record_bag 3)
-        ros2 bag record $backward_cam_topic $forward_cam_topic $odom_topic -o $rosbag_dir
-        $(cleanup exploration)
-        tmux wait-for -S exploration_done
-    "
-    tmux split-window -v -t exploration:explorer -p 80 bash -c "
-        $(setup deploy_nomad controller 0)
-        export ROS_DOMAIN_ID=$ID
-        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
-    "
-    tmux split-window -v -t exploration:explorer bash -c "
-        $(setup deploy_nomad exploration 3)
-        export ROS_DOMAIN_ID=$ID
-        ros2 run nomad explore.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
-    "
-    tmux attach -t exploration
+    explore
     tmux wait-for exploration_done
 
-    tmux new-session -d -s topomap_creation -n topomap bash -c "
-        $(setup deploy_nomad topomap_creation 0)
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
-        python3 src/nomad/deploy/code/deployment/optimize.py -d $pick_target_dir -n $weight -o $topomap -y $opt_config
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
-        $(cleanup topomap_creation)
-        tmux wait-for -S topomap_done
-    "
-    tmux attach -t topomap_creation
+    create_topomap
     tmux wait-for topomap_done
 
     tmux new-session -d -s search -n searcher bash -c "
         $(setup deploy_nomad rotation 0)
-        export ROS_DOMAIN_ID=$ID
         ros2 topic echo $vel_topic
         tmux wait-for -S search_done
     "
     tmux split-window -v -t search:searcher bash -c "
         $(setup deploy_nomad search 0)
         mkdir -p $target_dir && cp $pick_target_dir/0.png $target_dir
-        export ROS_DOMAIN_ID=$ID
         ros2 run nomad search.py --rotate --ros-args --params-file $model_config --remap /img:=$forward_cam_topic --remap /vel:=$vel_topic
         $(cleanup search)
     "
     tmux attach -t search
     tmux wait-for search_done
 
-    tmux new-session -d -s navigation -n navigator bash -c "
-        $(setup deploy_nomad controller 0)
-        export ROS_DOMAIN_ID=$ID
-        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
-        tmux wait-for -S navigation_done
-    "
-    tmux split-window -v -t navigation:navigator bash -c "
-        $(setup deploy_nomad navigation 3)
-        sed -i 's|topomap/[^\"]*|topomap/$bag_name|' $model_config
-        export ROS_DOMAIN_ID=$ID
-        ros2 run nomad navigate.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
-        $(cleanup navigation)
-    "
-    tmux attach -t navigation
+    navigate
     tmux wait-for navigation_done
 }
 
