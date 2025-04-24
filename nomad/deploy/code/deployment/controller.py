@@ -17,7 +17,7 @@ class Controller(Node):
     def __init__(self):
         super().__init__('controller')
 
-        self.continue_zero_publish = False
+        self.continue_zero_publish = True
 
         self.v_max = self.declare_parameter("v_max", 0.2).value
         self.w_max = self.declare_parameter("w_max", 0.2).value

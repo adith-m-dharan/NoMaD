@@ -216,6 +216,7 @@ class Search(Node):
                     vel_msg.angular.z = self.w_max / 2
                     self.vel_pub.publish(vel_msg)
                     rate.sleep()
+                    continue
 
                 with torch.no_grad():
                     if len(obs_cond.shape) == 2:

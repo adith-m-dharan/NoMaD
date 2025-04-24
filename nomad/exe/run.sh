@@ -11,10 +11,11 @@ controller_config="src/nomad/deploy/config/controller.yaml"
 weight="src/nomad/deploy/model_weights/nomad.pth"
 rosbag_dir="src/nomad/preprocessing/rosbags/$bag_name"
 training_data_dir="src/nomad/preprocessing/training_data"
-pick_target_dir="src/nomad/preprocessing/map/backward/$bag_name"
+back_target_dir="src/nomad/preprocessing/map/backward/$bag_name"
+for_target_dir="src/nomad/preprocessing/map/forward/$bag_name"
 target_dir="src/nomad/preprocessing/target"
-forward_dir="src/nomad/preprocessing/map/forward"
 backward_dir="src/nomad/preprocessing/map/backward"
+forward_dir="src/nomad/preprocessing/map/forward"
 topomap="src/nomad/preprocessing/topomap/$bag_name"
 forward_cam_topic="forward/image_raw"
 backward_cam_topic="backward/image_raw"
@@ -48,6 +49,7 @@ create_tmux_session() {
 collect_trajectory() {
     local commands="
         $(setup deploy_nomad record_bag 5)
+        rm -rf $rosbag_dir
         ros2 bag record $forward_cam_topic $backward_cam_topic $odom_topic -o $rosbag_dir
         $(cleanup record_bag)
     "
@@ -65,20 +67,37 @@ create_training_data() {
 }
 
 create_topomap() {
-    local commands="
-        $(setup deploy_nomad topomap_creation 0)
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
-        python3 src/nomad/deploy/code/deployment/optimize.py -d $pick_target_dir -n $weight -o $topomap -y $opt_config
-        ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
-        $(cleanup topomap_creation)
-    "
+    local mode=${1:-forward}
+
+    if [[ "$mode" == "backward" ]]; then
+        local commands="
+            $(setup deploy_nomad topomap_creation 0)
+            ros2 run nomad create_topomap.py -b $rosbag_dir -T $backward_dir -d $bag_name -i $backward_cam_topic -t 1.0 -w 1 --reverse
+            python3 src/nomad/deploy/code/deployment/optimize.py -d $back_target_dir -n $weight -o $topomap -y $opt_config
+            mkdir -p $target_dir && cp $back_target_dir/0.png $target_dir
+            $(cleanup topomap_creation)
+        "
+    else
+        local commands="
+            $(setup deploy_nomad topomap_creation 0)
+            ros2 run nomad create_topomap.py -b $rosbag_dir -T $forward_dir -d $bag_name -i $forward_cam_topic -t 1.0 -w 1
+            python3 src/nomad/deploy/code/deployment/optimize.py -d $for_target_dir -n $weight -o $topomap -y $opt_config
+            mkdir -p $target_dir && cp $for_target_dir/0.png $target_dir
+            $(cleanup topomap_creation)
+        "
+    fi
+
     create_tmux_session "topomap_creation" "topomap" "$commands"
+}
+
+run_controller() {
+    echo "ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic"
 }
 
 navigate() {
     tmux new-session -d -s navigation -n navigator bash -c "
         $(setup deploy_nomad controller 0)
-        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+        $(run_controller)
     "
     tmux split-window -v -t navigation:navigator bash -c "
         $(setup deploy_nomad navigation 5)
@@ -92,12 +111,13 @@ navigate() {
 explore() {
     tmux new-session -d -s exploration -n explorer bash -c "
         $(setup deploy_nomad record_bag 5)
+        rm -rf $rosbag_dir
         ros2 bag record $backward_cam_topic $forward_cam_topic $odom_topic -o $rosbag_dir
         $(cleanup exploration)
     "
     tmux split-window -v -t exploration:explorer -p 80 bash -c "
         $(setup deploy_nomad controller 0)
-        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+        $(run_controller)
     "
     tmux split-window -v -t exploration:explorer bash -c "
         $(setup deploy_nomad exploration 5)
@@ -109,11 +129,12 @@ explore() {
 search() {
     tmux new-session -d -s search -n searcher bash -c "
         $(setup deploy_nomad controller 0)
-        ros2 run nomad controller.py --ros-args --params-file $controller_config --remap /vel:=$vel_topic
+        $(run_controller)
     "
     tmux split-window -v -t search:searcher bash -c "
         $(setup deploy_nomad search 5)
         ros2 run nomad search.py --ros-args --params-file $model_config --remap /img:=$forward_cam_topic
+        exec bash
         $(cleanup search)
     "
     tmux attach -t search
@@ -122,17 +143,16 @@ boomerang() {
     explore
     tmux wait-for exploration_done
 
-    create_topomap
+    create_topomap backward
     tmux wait-for topomap_done
 
     tmux new-session -d -s search -n searcher bash -c "
         $(setup deploy_nomad rotation 0)
-        ros2 topic echo $vel_topic
+        ros2 topic echo $vel_topic geometry_msgs/msg/Twist
         tmux wait-for -S search_done
     "
     tmux split-window -v -t search:searcher bash -c "
         $(setup deploy_nomad search 0)
-        mkdir -p $target_dir && cp $pick_target_dir/0.png $target_dir
         ros2 run nomad search.py --rotate --ros-args --params-file $model_config --remap /img:=$forward_cam_topic --remap /vel:=$vel_topic
         $(cleanup search)
     "
