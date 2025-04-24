@@ -17,7 +17,7 @@ class Controller(Node):
     def __init__(self):
         super().__init__('controller')
 
-        self.continue_zero_publish = True
+        self.continue_zero_publish = False
 
         self.v_max = self.declare_parameter("v_max", 0.2).value
         self.w_max = self.declare_parameter("w_max", 0.2).value
@@ -108,7 +108,7 @@ class Controller(Node):
                 v *= -1
             vel_msg.linear.x = v
             vel_msg.angular.z = w
-            self.get_logger().info(f"Publishing new vel: {v}, {w}")
+            self.get_logger().info(f"Publishing new vel (linear: {v:.2f}, angular: {w:.2f})")
 
         elif self.continue_zero_publish:
             vel_msg.linear.x = 0.0
